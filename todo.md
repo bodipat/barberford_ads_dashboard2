@@ -62,3 +62,10 @@
 - [x] Display SEO metrics (sessions, users, bounce rate, page views)
 - [x] Create combined performance charts
 - [x] Test and validate integration
+
+## Event Goals from GA4
+- [x] Add getEventGoals function to fetch GA4 events/conversions
+- [x] Create analytics router endpoint for event goals
+- [x] Add Event Goals UI section to AnalyticsSection component
+- [x] Display key events (phone calls, form submissions, etc.)
+- [x] Test event goals integration

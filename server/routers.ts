@@ -16,6 +16,8 @@ import {
   getDailyMetrics as getGADailyMetrics,
   getChannelBreakdown,
   testConnection as testGAConnection,
+  getEventGoals,
+  getConversionEvents,
 } from "./googleAnalytics";
 
 // Mock data generation for Google Ads Dashboard (fallback when API not available)
@@ -576,6 +578,46 @@ export const appRouter = router({
       const result = await testGAConnection();
       return result;
     }),
+
+    // Get event goals / key events
+    getEventGoals: publicProcedure
+      .input(z.object({ 
+        startDate: z.string().optional().default("30daysAgo"),
+        endDate: z.string().optional().default("today")
+      }))
+      .query(async ({ input }) => {
+        try {
+          const data = await getEventGoals(input.startDate, input.endDate);
+          return { success: true, data };
+        } catch (error) {
+          console.error("[Analytics] Error fetching event goals:", error);
+          return { 
+            success: false, 
+            error: error instanceof Error ? error.message : "Unknown error",
+            data: [] 
+          };
+        }
+      }),
+
+    // Get conversion events only (key events marked in GA4)
+    getConversionEvents: publicProcedure
+      .input(z.object({ 
+        startDate: z.string().optional().default("30daysAgo"),
+        endDate: z.string().optional().default("today")
+      }))
+      .query(async ({ input }) => {
+        try {
+          const data = await getConversionEvents(input.startDate, input.endDate);
+          return { success: true, data };
+        } catch (error) {
+          console.error("[Analytics] Error fetching conversion events:", error);
+          return { 
+            success: false, 
+            error: error instanceof Error ? error.message : "Unknown error",
+            data: [] 
+          };
+        }
+      }),
 
     // Get combined dashboard data (GA + Ads)
     getCombinedData: publicProcedure

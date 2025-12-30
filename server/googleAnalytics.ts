@@ -69,6 +69,14 @@ export interface ChannelData {
   bounceRate: number;
 }
 
+export interface EventGoal {
+  eventName: string;
+  eventCount: number;
+  totalUsers: number;
+  eventCountPerUser: number;
+  isConversion: boolean;
+}
+
 // Get overview metrics
 export async function getAnalyticsOverview(
   startDate: string = "30daysAgo",
@@ -316,6 +324,116 @@ export async function testConnection(): Promise<{ success: boolean; message: str
       message: `Connection failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
+}
+
+// Get event goals / key events
+export async function getEventGoals(
+  startDate: string = "30daysAgo",
+  endDate: string = "today"
+): Promise<EventGoal[]> {
+  const propertyId = process.env.GA4_PROPERTY_ID;
+  if (!propertyId) {
+    throw new Error("GA4_PROPERTY_ID environment variable is not set");
+  }
+
+  const client = getAnalyticsClient();
+
+  // Fetch all events with their counts
+  const [response] = await client.runReport({
+    property: `properties/${propertyId}`,
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [
+      { name: "eventName" },
+      { name: "isKeyEvent" }, // This indicates if the event is marked as a conversion/key event
+    ],
+    metrics: [
+      { name: "eventCount" },
+      { name: "totalUsers" },
+      { name: "eventCountPerUser" },
+    ],
+    orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+    limit: 50,
+  });
+
+  if (!response.rows) {
+    return [];
+  }
+
+  // Filter to show key events (conversions) and important engagement events
+  const importantEvents = [
+    "click", "form_submit", "generate_lead", "purchase", "sign_up",
+    "contact", "phone_call", "book_appointment", "scroll", "file_download",
+    "video_start", "video_complete", "add_to_cart", "begin_checkout",
+  ];
+
+  return response.rows
+    .map((row) => {
+      const eventName = row.dimensionValues?.[0]?.value || "";
+      const isKeyEvent = row.dimensionValues?.[1]?.value === "true";
+      
+      return {
+        eventName,
+        eventCount: parseInt(row.metricValues?.[0]?.value || "0"),
+        totalUsers: parseInt(row.metricValues?.[1]?.value || "0"),
+        eventCountPerUser: parseFloat(row.metricValues?.[2]?.value || "0"),
+        isConversion: isKeyEvent,
+      };
+    })
+    .filter((event) => {
+      // Include if it's a key event OR if it's an important engagement event
+      const isImportant = importantEvents.some(name => 
+        event.eventName.toLowerCase().includes(name.toLowerCase())
+      );
+      // Exclude common automatic events that aren't useful
+      const excludeEvents = ["session_start", "first_visit", "page_view", "user_engagement"];
+      const isExcluded = excludeEvents.includes(event.eventName);
+      
+      return (event.isConversion || isImportant) && !isExcluded;
+    });
+}
+
+// Get conversion events summary (key events only)
+export async function getConversionEvents(
+  startDate: string = "30daysAgo",
+  endDate: string = "today"
+): Promise<EventGoal[]> {
+  const propertyId = process.env.GA4_PROPERTY_ID;
+  if (!propertyId) {
+    throw new Error("GA4_PROPERTY_ID environment variable is not set");
+  }
+
+  const client = getAnalyticsClient();
+
+  // Fetch only key events (conversions)
+  const [response] = await client.runReport({
+    property: `properties/${propertyId}`,
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: "eventName" }],
+    metrics: [
+      { name: "eventCount" },
+      { name: "totalUsers" },
+      { name: "eventCountPerUser" },
+    ],
+    dimensionFilter: {
+      filter: {
+        fieldName: "isKeyEvent",
+        stringFilter: { value: "true" },
+      },
+    },
+    orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+  });
+
+  if (!response.rows) {
+    return [];
+  }
+
+  return response.rows.map((row) => ({
+    eventName: row.dimensionValues?.[0]?.value || "",
+    eventCount: parseInt(row.metricValues?.[0]?.value || "0"),
+    totalUsers: parseInt(row.metricValues?.[1]?.value || "0"),
+    eventCountPerUser: parseFloat(row.metricValues?.[2]?.value || "0"),
+    isConversion: true,
+  }));
 }
 
 // Helper function to format date from YYYYMMDD to YYYY-MM-DD

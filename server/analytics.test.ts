@@ -68,4 +68,22 @@ describe("Google Analytics Integration", () => {
       expect(firstChannel).toHaveProperty("bounceRate");
     }
   });
+
+  it("should fetch event goals", async () => {
+    const { getEventGoals } = await import("./googleAnalytics");
+    const events = await getEventGoals("30daysAgo", "today");
+    
+    expect(Array.isArray(events)).toBe(true);
+    
+    // Events array may be empty if no key events are configured
+    if (events.length > 0) {
+      const firstEvent = events[0];
+      expect(firstEvent).toHaveProperty("eventName");
+      expect(firstEvent).toHaveProperty("eventCount");
+      expect(firstEvent).toHaveProperty("totalUsers");
+      expect(firstEvent).toHaveProperty("eventCountPerUser");
+      expect(firstEvent).toHaveProperty("isConversion");
+      expect(typeof firstEvent.eventCount).toBe("number");
+    }
+  });
 });

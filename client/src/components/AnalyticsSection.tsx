@@ -15,6 +15,11 @@ import {
   ArrowDownRight,
   RefreshCw,
   Activity,
+  Target,
+  Phone,
+  FileText,
+  MousePointerClick,
+  Zap,
 } from "lucide-react";
 import {
   LineChart,
@@ -130,12 +135,47 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
+// Event icon mapping
+const EVENT_ICONS: Record<string, React.ElementType> = {
+  click: MousePointerClick,
+  phone_call: Phone,
+  form_submit: FileText,
+  generate_lead: Target,
+  scroll: Eye,
+  default: Zap,
+};
+
+function getEventIcon(eventName: string): React.ElementType {
+  const lowerName = eventName.toLowerCase();
+  for (const [key, icon] of Object.entries(EVENT_ICONS)) {
+    if (lowerName.includes(key)) return icon;
+  }
+  return EVENT_ICONS.default;
+}
+
+// Format event name for display
+function formatEventName(eventName: string): string {
+  return eventName
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+    .trim();
+}
+
 // Main Analytics Section Component
 export default function AnalyticsSection() {
   const [activeTab, setActiveTab] = useState("overview");
 
   // Fetch combined analytics data
   const { data: analyticsData, isLoading, error } = trpc.analytics.getCombinedData.useQuery({
+    startDate: "30daysAgo",
+    endDate: "today",
+  });
+
+  // Fetch event goals
+  const { data: eventGoalsData, isLoading: eventsLoading } = trpc.analytics.getEventGoals.useQuery({
     startDate: "30daysAgo",
     endDate: "today",
   });
@@ -414,6 +454,77 @@ export default function AnalyticsSection() {
             </AreaChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      {/* Event Goals Section */}
+      <div className="bg-card rounded-xl border border-border/50 shadow-lg p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <Target className="w-5 h-5 text-primary" />
+            Event Goals & Conversions
+          </h3>
+          {eventsLoading && (
+            <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
+          )}
+        </div>
+        
+        {eventGoalsData?.success && eventGoalsData.data.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {eventGoalsData.data.map((event, index) => {
+              const EventIcon = getEventIcon(event.eventName);
+              return (
+                <div
+                  key={index}
+                  className={`p-4 rounded-lg border transition-all ${
+                    event.isConversion
+                      ? "bg-primary/10 border-primary/30 hover:border-primary/50"
+                      : "bg-muted/30 border-border/50 hover:border-border"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={`p-1.5 rounded-md ${
+                      event.isConversion ? "bg-primary/20" : "bg-muted"
+                    }`}>
+                      <EventIcon className={`w-4 h-4 ${
+                        event.isConversion ? "text-primary" : "text-muted-foreground"
+                      }`} />
+                    </div>
+                    {event.isConversion && (
+                      <Badge className="text-[10px] px-1.5 py-0 bg-primary/20 text-primary border-primary/30">
+                        Key Event
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm font-medium text-foreground truncate" title={event.eventName}>
+                    {formatEventName(event.eventName)}
+                  </p>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-xl font-bold text-foreground">
+                      {event.eventCount.toLocaleString()}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      events
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {event.totalUsers.toLocaleString()} users • {event.eventCountPerUser.toFixed(1)}/user
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        ) : eventGoalsData?.success && eventGoalsData.data.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Target className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p>No event goals configured in GA4</p>
+            <p className="text-sm mt-1">Set up key events in Google Analytics to track conversions</p>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin opacity-30" />
+            <p>Loading event goals...</p>
+          </div>
+        )}
       </div>
 
       {/* Top Traffic Sources Table */}
