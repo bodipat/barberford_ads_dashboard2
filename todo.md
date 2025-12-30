@@ -43,3 +43,11 @@
 - [x] Add fallback to mock data when API unavailable
 - [x] Handle API rate limits and errors gracefully
 - [x] Add live/demo data source indicator badge
+
+## UI/UX Improvements (User Feedback)
+
+- [x] Hide or filter campaigns with no data (฿0 spend, 0 conversions)
+- [x] Fix Quality Score display - show "N/A" instead of 0/10
+- [x] Fix Conversions by Campaign chart - truncated campaign names
+- [x] Fix Budget Distribution pie chart - overlapping legend text
+- [x] Improve overall chart readability

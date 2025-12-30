@@ -435,15 +435,23 @@ export default function Dashboard() {
     ctr: 0,
   };
 
-  const campaigns = dashboardData?.campaigns || [];
+  const allCampaigns = dashboardData?.campaigns || [];
+  // Filter out campaigns with no data (0 spend and 0 impressions)
+  const campaigns = allCampaigns.filter((c: CampaignData) => c.spend > 0 || c.impressions > 0);
   const dailyTrends = dashboardData?.dailyTrends || [];
   const alerts = dashboardData?.alerts || [];
 
-  // Prepare pie chart data
-  const pieData = campaigns.map((c: CampaignData) => ({
-    name: c.name,
-    value: c.spend,
-  }));
+  // Prepare pie chart data - use short names for better display
+  const pieData = campaigns.map((c: CampaignData) => {
+    // Extract short name from campaign name (e.g., "BF | Search | Thonglor | Calls" -> "Thonglor")
+    const parts = c.name.split('|').map(s => s.trim());
+    const shortName = parts.length >= 3 ? parts[2] : (parts.length >= 2 ? parts[1] : c.name);
+    return {
+      name: shortName.length > 15 ? shortName.substring(0, 15) + '...' : shortName,
+      fullName: c.name,
+      value: c.spend,
+    };
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -587,11 +595,30 @@ export default function Dashboard() {
             <h3 className="text-lg font-semibold text-foreground mb-4">Conversions by Campaign</h3>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={campaigns} layout="vertical">
+                <BarChart 
+                  data={campaigns.map((c: CampaignData) => {
+                    const parts = c.name.split('|').map(s => s.trim());
+                    const shortName = parts.length >= 3 ? parts[2] : (parts.length >= 2 ? parts[1] : c.name);
+                    return { ...c, shortName: shortName.length > 12 ? shortName.substring(0, 12) + '...' : shortName };
+                  })} 
+                  layout="vertical"
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.3 0.01 285)" />
                   <XAxis type="number" stroke="oklch(0.6 0.015 285)" fontSize={12} />
-                  <YAxis dataKey="name" type="category" stroke="oklch(0.6 0.015 285)" fontSize={12} width={80} />
-                  <RechartsTooltip content={<CustomTooltip />} />
+                  <YAxis dataKey="shortName" type="category" stroke="oklch(0.6 0.015 285)" fontSize={11} width={100} />
+                  <RechartsTooltip 
+                    content={({ payload }: { payload?: any[] }) => {
+                      if (!payload || !payload.length) return null;
+                      const data = payload[0]?.payload;
+                      return (
+                        <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
+                          <p className="text-sm font-medium text-foreground mb-1">{data?.name}</p>
+                          <p className="text-sm text-primary">Conversions: {data?.conversions}</p>
+                          <p className="text-sm text-muted-foreground">Spend: ฿{data?.spend?.toLocaleString()}</p>
+                        </div>
+                      );
+                    }}
+                  />
                   <Bar dataKey="conversions" name="Conversions" fill={CHART_COLORS.gold} radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -607,12 +634,12 @@ export default function Dashboard() {
                   <Pie
                     data={pieData}
                     cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
+                    cy="45%"
+                    innerRadius={50}
+                    outerRadius={80}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                     labelLine={false}
                   >
                     {pieData.map((entry: { name: string; value: number }, index: number) => (
@@ -622,18 +649,24 @@ export default function Dashboard() {
                   <RechartsTooltip
                     content={({ payload }: { payload?: any[] }) => {
                       if (!payload || !payload.length) return null;
+                      const data = payload[0]?.payload;
                       return (
                         <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
-                          {payload.map((entry: any, i: number) => (
-                            <p key={i} className="text-sm" style={{ color: entry.payload?.fill }}>
-                              {entry.name}: ฿{entry.value?.toLocaleString()}
-                            </p>
-                          ))}
+                          <p className="text-sm font-medium text-foreground mb-1">{data?.fullName || data?.name}</p>
+                          <p className="text-sm" style={{ color: payload[0]?.payload?.fill }}>
+                            Spend: ฿{data?.value?.toLocaleString()}
+                          </p>
                         </div>
                       );
                     }}
                   />
-                  <Legend />
+                  <Legend 
+                    layout="horizontal" 
+                    align="center" 
+                    verticalAlign="bottom"
+                    wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
+                    formatter={(value: string) => <span className="text-muted-foreground">{value}</span>}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -699,17 +732,21 @@ export default function Dashboard() {
                       </Badge>
                     </td>
                     <td>
-                      <span
-                        className={`font-medium ${
-                          keyword.qualityScore >= 7
-                            ? "text-green-400"
-                            : keyword.qualityScore >= 5
-                              ? "text-yellow-400"
-                              : "text-red-400"
-                        }`}
-                      >
-                        {keyword.qualityScore}/10
-                      </span>
+                      {keyword.qualityScore > 0 ? (
+                        <span
+                          className={`font-medium ${
+                            keyword.qualityScore >= 7
+                              ? "text-green-400"
+                              : keyword.qualityScore >= 5
+                                ? "text-yellow-400"
+                                : "text-red-400"
+                          }`}
+                        >
+                          {keyword.qualityScore}/10
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">N/A</span>
+                      )}
                     </td>
                     <td>{keyword.impressions.toLocaleString()}</td>
                     <td>{keyword.clicks.toLocaleString()}</td>
