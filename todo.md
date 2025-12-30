@@ -32,3 +32,14 @@
 - [x] tRPC procedures for dashboard data
 - [x] Mock data generation
 - [x] Aggregation queries for metrics
+
+## Google Ads API Integration
+
+- [x] Set up Google Ads API credentials (Developer Token, OAuth Client ID/Secret)
+- [x] Implement OAuth 2.0 authentication flow
+- [x] Create Google Ads API service layer
+- [x] Fetch real campaign performance data
+- [x] Fetch real keyword performance data
+- [x] Add fallback to mock data when API unavailable
+- [x] Handle API rate limits and errors gracefully
+- [x] Add live/demo data source indicator badge

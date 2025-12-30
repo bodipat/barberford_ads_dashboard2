@@ -454,6 +454,14 @@ export default function Dashboard() {
             <div>
               <h1 className="text-2xl font-bold text-gold-gradient">Barberford Ads Dashboard</h1>
               <p className="text-sm text-muted-foreground">Google Ads Performance Analytics</p>
+              {dashboardData?.dataSource && (
+                <Badge 
+                  variant={dashboardData.dataSource === "live" ? "default" : "secondary"}
+                  className={`mt-1 text-xs ${dashboardData.dataSource === "live" ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"}`}
+                >
+                  {dashboardData.dataSource === "live" ? "🔴 Live Data" : "📊 Demo Data"}
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <Select value={dateRange} onValueChange={(v) => setDateRange(v as typeof dateRange)}>

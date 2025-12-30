@@ -3,8 +3,15 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
+import {
+  fetchCampaignMetrics,
+  fetchDailyMetrics,
+  fetchKeywordMetrics,
+  isConfigured,
+  testConnection,
+} from "./googleAds";
 
-// Mock data generation for Google Ads Dashboard
+// Mock data generation for Google Ads Dashboard (fallback when API not available)
 function generateMockDashboardData(dateRange: string) {
   // Campaign configuration based on the Google Ads guide
   const campaignConfig = [
@@ -194,7 +201,222 @@ function generateMockDashboardData(dateRange: string) {
     dailyTrends,
     keywords,
     alerts,
+    dataSource: "mock" as const,
   };
+}
+
+// Get date range based on selection
+function getDateRange(dateRange: string): { startDate: string; endDate: string } {
+  const today = new Date();
+  const endDate = today.toISOString().split("T")[0];
+  
+  let startDate: string;
+  switch (dateRange) {
+    case "daily":
+      startDate = endDate;
+      break;
+    case "weekly":
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      startDate = weekAgo.toISOString().split("T")[0];
+      break;
+    case "campaign":
+    default:
+      // Last 30 days for campaign-to-date
+      const monthAgo = new Date(today);
+      monthAgo.setDate(monthAgo.getDate() - 30);
+      startDate = monthAgo.toISOString().split("T")[0];
+      break;
+  }
+  
+  return { startDate, endDate };
+}
+
+// Fetch real data from Google Ads API
+async function fetchRealDashboardData(dateRange: string) {
+  const { startDate, endDate } = getDateRange(dateRange);
+  
+  try {
+    // Fetch all data in parallel
+    const [campaignData, dailyData, keywordData] = await Promise.all([
+      fetchCampaignMetrics(startDate, endDate),
+      fetchDailyMetrics(startDate, endDate),
+      fetchKeywordMetrics(startDate, endDate),
+    ]);
+
+    // Transform campaign data
+    const campaigns = campaignData.map((c, index) => {
+      // Determine status based on performance
+      let status: "healthy" | "warning" | "critical" = "healthy";
+      if (c.cpc > 600 || c.ctr < 2.5) status = "critical";
+      else if (c.cpc > 450 || c.ctr < 3.5) status = "warning";
+
+      // Estimate budget based on campaign name (matching Barberford locations)
+      let budget = 4500; // default
+      const nameLower = c.name.toLowerCase();
+      if (nameLower.includes("erawan")) budget = 5500;
+      else if (nameLower.includes("noir")) budget = 3960;
+      else if (nameLower.includes("reserve")) budget = 4026;
+
+      return {
+        id: index + 1,
+        name: c.name,
+        location: nameLower.includes("erawan") ? "erawan" : 
+                  nameLower.includes("noir") ? "noir" : 
+                  nameLower.includes("reserve") ? "reserve" : "other",
+        spend: Math.round(c.spend),
+        budget,
+        impressions: c.impressions,
+        clicks: c.clicks,
+        conversions: Math.round(c.conversions),
+        ctr: parseFloat(c.ctr.toFixed(2)),
+        cpc: Math.round(c.cpc),
+        status,
+      };
+    });
+
+    // Calculate KPIs
+    const totalSpend = campaigns.reduce((sum, c) => sum + c.spend, 0);
+    const totalConversions = campaigns.reduce((sum, c) => sum + c.conversions, 0);
+    const totalClicks = campaigns.reduce((sum, c) => sum + c.clicks, 0);
+    const totalImpressions = campaigns.reduce((sum, c) => sum + c.impressions, 0);
+
+    const kpi = {
+      totalSpend,
+      totalBudget: 13500,
+      totalConversions,
+      targetConversions: 22,
+      costPerConversion: totalConversions > 0 ? Math.round(totalSpend / totalConversions) : 0,
+      targetCPC: 500,
+      conversionRate: totalClicks > 0 ? parseFloat(((totalConversions / totalClicks) * 100).toFixed(1)) : 0,
+      targetCVR: 7.5,
+      totalClicks,
+      totalImpressions,
+      ctr: totalImpressions > 0 ? parseFloat(((totalClicks / totalImpressions) * 100).toFixed(2)) : 0,
+    };
+
+    // Transform daily trends
+    const dailyTrends = dailyData.map((d) => {
+      const date = new Date(d.date);
+      return {
+        date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        spend: Math.round(d.spend),
+        conversions: Math.round(d.conversions),
+        clicks: d.clicks,
+      };
+    });
+
+    // Transform keywords
+    const keywords = keywordData.slice(0, 10).map((k, index) => ({
+      id: index + 1,
+      keyword: k.keyword,
+      matchType: String(k.matchType || "broad").toLowerCase().replace(/_/g, " "),
+      qualityScore: k.qualityScore,
+      impressions: k.impressions,
+      clicks: k.clicks,
+      conversions: Math.round(k.conversions),
+      spend: Math.round(k.cpc * k.clicks),
+      cpc: Math.round(k.cpc),
+      status: "active" as "active" | "paused",
+    }));
+
+    // Generate alerts based on real performance
+    const alerts: Array<{
+      id: number;
+      type: "success" | "warning" | "danger";
+      title: string;
+      message: string;
+      campaign?: string;
+      metric?: string;
+      value?: number;
+      threshold?: number;
+    }> = [];
+
+    let alertId = 1;
+
+    // Check each campaign for issues
+    campaigns.forEach((campaign) => {
+      if (campaign.cpc > 500) {
+        alerts.push({
+          id: alertId++,
+          type: "danger",
+          title: "High Cost Per Conversion",
+          message: `CPC exceeds target threshold. Consider pausing low-performing keywords or improving ad relevance.`,
+          campaign: campaign.name,
+          metric: "CPC",
+          value: campaign.cpc,
+          threshold: 500,
+        });
+      }
+      if (campaign.ctr < 3) {
+        alerts.push({
+          id: alertId++,
+          type: "warning",
+          title: "Low Click-Through Rate",
+          message: `CTR is below benchmark. Test new ad copy variations or review keyword relevance.`,
+          campaign: campaign.name,
+          metric: "CTR",
+          value: campaign.ctr,
+          threshold: 3,
+        });
+      }
+      if (campaign.spend / campaign.budget > 0.9) {
+        alerts.push({
+          id: alertId++,
+          type: "warning",
+          title: "Budget Nearly Exhausted",
+          message: `Campaign has used over 90% of allocated budget. Monitor pacing carefully.`,
+          campaign: campaign.name,
+          metric: "Budget Used",
+          value: Math.round((campaign.spend / campaign.budget) * 100),
+          threshold: 90,
+        });
+      }
+    });
+
+    // Check keywords for quality score issues
+    const lowQSKeywords = keywords.filter((k) => k.qualityScore < 5);
+    if (lowQSKeywords.length > 0) {
+      alerts.push({
+        id: alertId++,
+        type: "warning",
+        title: "Low Quality Score Keywords",
+        message: `${lowQSKeywords.length} keywords have Quality Score below 5. Improve ad relevance and landing page experience.`,
+      });
+    }
+
+    // Add success alerts if performing well
+    if (kpi.conversionRate >= kpi.targetCVR) {
+      alerts.push({
+        id: alertId++,
+        type: "success",
+        title: "Conversion Rate On Target",
+        message: `Overall conversion rate of ${kpi.conversionRate}% meets or exceeds the ${kpi.targetCVR}% target.`,
+      });
+    }
+
+    // Add info about real data
+    if (campaigns.length === 0) {
+      alerts.unshift({
+        id: 0,
+        type: "warning",
+        title: "No Campaign Data",
+        message: "No active campaigns found in the selected date range. Data shown may be limited.",
+      });
+    }
+
+    return {
+      kpi,
+      campaigns,
+      dailyTrends,
+      keywords,
+      alerts,
+      dataSource: "live" as const,
+    };
+  } catch (error) {
+    console.error("[Dashboard] Error fetching real data:", error);
+    throw error;
+  }
 }
 
 export const appRouter = router({
@@ -213,9 +435,51 @@ export const appRouter = router({
   dashboard: router({
     getData: publicProcedure
       .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
-      .query(({ input }) => {
-        return generateMockDashboardData(input.dateRange);
+      .query(async ({ input }) => {
+        // Check if Google Ads API is configured
+        if (isConfigured()) {
+          try {
+            console.log("[Dashboard] Fetching real data from Google Ads API...");
+            const data = await fetchRealDashboardData(input.dateRange);
+            console.log("[Dashboard] Successfully fetched real data");
+            return data;
+          } catch (error) {
+            console.error("[Dashboard] Failed to fetch real data, falling back to mock:", error);
+            // Fall back to mock data if API fails
+            return generateMockDashboardData(input.dateRange);
+          }
+        } else {
+          console.log("[Dashboard] Google Ads API not configured, using mock data");
+          return generateMockDashboardData(input.dateRange);
+        }
       }),
+
+    // Test API connection endpoint
+    testConnection: publicProcedure.query(async () => {
+      if (!isConfigured()) {
+        return {
+          success: false,
+          message: "Google Ads API credentials not configured",
+          configured: false,
+        };
+      }
+      
+      const result = await testConnection();
+      return {
+        ...result,
+        configured: true,
+      };
+    }),
+
+    // Get API status
+    getStatus: publicProcedure.query(() => {
+      return {
+        configured: isConfigured(),
+        message: isConfigured() 
+          ? "Google Ads API is configured and ready" 
+          : "Using mock data (Google Ads API not configured)",
+      };
+    }),
   }),
 });
 
