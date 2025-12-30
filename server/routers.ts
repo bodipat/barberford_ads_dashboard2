@@ -10,6 +10,13 @@ import {
   isConfigured,
   testConnection,
 } from "./googleAds";
+import {
+  getAnalyticsOverview,
+  getTrafficSources,
+  getDailyMetrics as getGADailyMetrics,
+  getChannelBreakdown,
+  testConnection as testGAConnection,
+} from "./googleAnalytics";
 
 // Mock data generation for Google Ads Dashboard (fallback when API not available)
 function generateMockDashboardData(dateRange: string) {
@@ -480,6 +487,141 @@ export const appRouter = router({
           : "Using mock data (Google Ads API not configured)",
       };
     }),
+  }),
+
+  // Google Analytics router
+  analytics: router({
+    // Get overview metrics
+    getOverview: publicProcedure
+      .input(z.object({ 
+        startDate: z.string().optional().default("30daysAgo"),
+        endDate: z.string().optional().default("today")
+      }))
+      .query(async ({ input }) => {
+        try {
+          const data = await getAnalyticsOverview(input.startDate, input.endDate);
+          return { success: true, data };
+        } catch (error) {
+          console.error("[Analytics] Error fetching overview:", error);
+          return { 
+            success: false, 
+            error: error instanceof Error ? error.message : "Unknown error",
+            data: null 
+          };
+        }
+      }),
+
+    // Get traffic sources
+    getTrafficSources: publicProcedure
+      .input(z.object({ 
+        startDate: z.string().optional().default("30daysAgo"),
+        endDate: z.string().optional().default("today")
+      }))
+      .query(async ({ input }) => {
+        try {
+          const data = await getTrafficSources(input.startDate, input.endDate);
+          return { success: true, data };
+        } catch (error) {
+          console.error("[Analytics] Error fetching traffic sources:", error);
+          return { 
+            success: false, 
+            error: error instanceof Error ? error.message : "Unknown error",
+            data: [] 
+          };
+        }
+      }),
+
+    // Get daily metrics for trend charts
+    getDailyMetrics: publicProcedure
+      .input(z.object({ 
+        startDate: z.string().optional().default("30daysAgo"),
+        endDate: z.string().optional().default("today")
+      }))
+      .query(async ({ input }) => {
+        try {
+          const data = await getGADailyMetrics(input.startDate, input.endDate);
+          return { success: true, data };
+        } catch (error) {
+          console.error("[Analytics] Error fetching daily metrics:", error);
+          return { 
+            success: false, 
+            error: error instanceof Error ? error.message : "Unknown error",
+            data: [] 
+          };
+        }
+      }),
+
+    // Get channel breakdown (Organic vs Paid etc)
+    getChannelBreakdown: publicProcedure
+      .input(z.object({ 
+        startDate: z.string().optional().default("30daysAgo"),
+        endDate: z.string().optional().default("today")
+      }))
+      .query(async ({ input }) => {
+        try {
+          const data = await getChannelBreakdown(input.startDate, input.endDate);
+          return { success: true, data };
+        } catch (error) {
+          console.error("[Analytics] Error fetching channel breakdown:", error);
+          return { 
+            success: false, 
+            error: error instanceof Error ? error.message : "Unknown error",
+            data: [] 
+          };
+        }
+      }),
+
+    // Test GA4 connection
+    testConnection: publicProcedure.query(async () => {
+      const result = await testGAConnection();
+      return result;
+    }),
+
+    // Get combined dashboard data (GA + Ads)
+    getCombinedData: publicProcedure
+      .input(z.object({ 
+        startDate: z.string().optional().default("30daysAgo"),
+        endDate: z.string().optional().default("today")
+      }))
+      .query(async ({ input }) => {
+        try {
+          const [overview, channels, dailyMetrics, trafficSources] = await Promise.all([
+            getAnalyticsOverview(input.startDate, input.endDate),
+            getChannelBreakdown(input.startDate, input.endDate),
+            getGADailyMetrics(input.startDate, input.endDate),
+            getTrafficSources(input.startDate, input.endDate),
+          ]);
+
+          // Find organic and paid data from channels
+          const organicData = channels.find(c => c.channel === "Organic Search") || {
+            channel: "Organic Search", users: 0, sessions: 0, conversions: 0, bounceRate: 0
+          };
+          const paidData = channels.find(c => c.channel === "Paid Search") || {
+            channel: "Paid Search", users: 0, sessions: 0, conversions: 0, bounceRate: 0
+          };
+
+          return {
+            success: true,
+            data: {
+              overview,
+              channels,
+              dailyMetrics,
+              trafficSources,
+              comparison: {
+                organic: organicData,
+                paid: paidData,
+              },
+            },
+          };
+        } catch (error) {
+          console.error("[Analytics] Error fetching combined data:", error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+            data: null,
+          };
+        }
+      }),
   }),
 });
 

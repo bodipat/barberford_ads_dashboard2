@@ -24,7 +24,9 @@ import {
   ChevronUp,
   ChevronDown,
   Info,
+  Globe,
 } from "lucide-react";
+import AnalyticsSection from "@/components/AnalyticsSection";
 import {
   LineChart,
   Line,
@@ -691,6 +693,11 @@ export default function Dashboard() {
               )}
             </div>
           </div>
+        </section>
+
+        {/* Google Analytics Section */}
+        <section>
+          <AnalyticsSection />
         </section>
 
         {/* Keywords Table */}
