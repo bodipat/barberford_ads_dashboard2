@@ -77,3 +77,12 @@
 - [x] Add conversion trend line chart
 - [x] Add per-campaign conversion breakdown table
 - [x] Test with live Google Ads data
+
+## Campaign to Date - Full History Fix
+- [ ] Update campaign start date from 30-day rolling to actual start date (Dec 17, 2025)
+- [ ] Verify all sections (KPIs, Campaign Performance, Keywords, Conversion Events) use full date range
+
+## Date Range Selector Bug Fix
+- [x] Fix Daily/Weekly/Campaign to Date selector not updating data across all sections
+- [x] Extend Campaign to Date start date to Dec 17, 2025 (actual campaign start)
+- [x] Ensure Event Goals & Conversions section also responds to date range changes

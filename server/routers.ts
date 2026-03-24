@@ -216,30 +216,39 @@ function generateMockDashboardData(dateRange: string) {
   };
 }
 
+// Actual campaign start date (Barberford campaigns launched Dec 17, 2025)
+const CAMPAIGN_START_DATE = "2025-12-17";
+
 // Get date range based on selection
 function getDateRange(dateRange: string): { startDate: string; endDate: string } {
   const today = new Date();
-  const endDate = today.toISOString().split("T")[0];
-  
+  // Use Bangkok timezone offset (UTC+7) to get correct local date
+  const bangkokOffset = 7 * 60;
+  const localDate = new Date(today.getTime() + (bangkokOffset + today.getTimezoneOffset()) * 60000);
+  const endDate = localDate.toISOString().split("T")[0];
+
   let startDate: string;
   switch (dateRange) {
-    case "daily":
+    case "daily": {
+      // Today only
       startDate = endDate;
       break;
-    case "weekly":
-      const weekAgo = new Date(today);
-      weekAgo.setDate(weekAgo.getDate() - 7);
+    }
+    case "weekly": {
+      // Last 7 days
+      const weekAgo = new Date(localDate);
+      weekAgo.setDate(weekAgo.getDate() - 6);
       startDate = weekAgo.toISOString().split("T")[0];
       break;
+    }
     case "campaign":
-    default:
-      // Last 30 days for campaign-to-date
-      const monthAgo = new Date(today);
-      monthAgo.setDate(monthAgo.getDate() - 30);
-      startDate = monthAgo.toISOString().split("T")[0];
+    default: {
+      // Full campaign history from actual launch date
+      startDate = CAMPAIGN_START_DATE;
       break;
+    }
   }
-  
+
   return { startDate, endDate };
 }
 

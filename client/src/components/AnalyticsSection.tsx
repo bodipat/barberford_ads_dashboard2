@@ -164,20 +164,35 @@ function formatEventName(eventName: string): string {
     .trim();
 }
 
+// Convert dashboard dateRange to GA4 date format
+function toGA4DateRange(dateRange: "daily" | "weekly" | "campaign"): { startDate: string; endDate: string } {
+  switch (dateRange) {
+    case "daily":
+      return { startDate: "today", endDate: "today" };
+    case "weekly":
+      return { startDate: "6daysAgo", endDate: "today" };
+    case "campaign":
+    default:
+      // Full campaign history from Dec 17, 2025
+      return { startDate: "2025-12-17", endDate: "today" };
+  }
+}
+
 // Main Analytics Section Component
-export default function AnalyticsSection() {
+export default function AnalyticsSection({ dateRange = "campaign" }: { dateRange?: "daily" | "weekly" | "campaign" }) {
   const [activeTab, setActiveTab] = useState("overview");
+  const { startDate, endDate } = toGA4DateRange(dateRange);
 
   // Fetch combined analytics data
   const { data: analyticsData, isLoading, error } = trpc.analytics.getCombinedData.useQuery({
-    startDate: "30daysAgo",
-    endDate: "today",
+    startDate,
+    endDate,
   });
 
   // Fetch event goals
   const { data: eventGoalsData, isLoading: eventsLoading } = trpc.analytics.getEventGoals.useQuery({
-    startDate: "30daysAgo",
-    endDate: "today",
+    startDate,
+    endDate,
   });
 
   if (isLoading) {

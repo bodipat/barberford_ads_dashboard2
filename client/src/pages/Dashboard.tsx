@@ -700,7 +700,7 @@ export default function Dashboard() {
 
         {/* Google Analytics Section */}
         <section>
-          <AnalyticsSection />
+          <AnalyticsSection dateRange={dateRange} />
         </section>
 
         {/* Event Goals & Conversions Section */}
