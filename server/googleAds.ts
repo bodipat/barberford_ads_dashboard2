@@ -250,6 +250,149 @@ export async function testConnection(): Promise<{
   }
 }
 
+// Conversion action data per event type
+export interface ConversionActionMetrics {
+  name: string;
+  category: string;
+  conversions: number;
+  conversionValue: number;
+  allConversions: number;
+}
+
+// Conversion data per campaign per day
+export interface ConversionDailyMetrics {
+  date: string;
+  campaign: string;
+  conversions: number;
+  allConversions: number;
+  conversionValue: number;
+}
+
+// Fetch conversion actions (event goals) with metrics
+// Uses campaign + segments.conversion_action_name to get per-action metrics in a date range
+export async function fetchConversionActions(
+  startDate: string,
+  endDate: string
+): Promise<ConversionActionMetrics[]> {
+  try {
+    const customer = getCustomer();
+
+    // First get all enabled conversion actions (name + category)
+    const actionDefs = await customer.query(`
+      SELECT
+        conversion_action.name,
+        conversion_action.category,
+        conversion_action.status
+      FROM conversion_action
+      WHERE conversion_action.status = 'ENABLED'
+    `);
+    // Map category numeric enum to string label
+    const CATEGORY_LABELS: Record<number, string> = {
+      0: "UNSPECIFIED",
+      1: "UNKNOWN",
+      2: "DEFAULT",
+      3: "PAGE_VIEW",
+      4: "PURCHASE",
+      5: "SIGNUP",
+      6: "LEAD",
+      7: "DOWNLOAD",
+      8: "ADD_TO_CART",
+      9: "BEGIN_CHECKOUT",
+      10: "SUBSCRIBE_PAID",
+      11: "PHONE_CALL_LEAD",
+      12: "IMPORTED_LEAD",
+      13: "SUBMIT_LEAD_FORM",
+      14: "BOOK_APPOINTMENT",
+      15: "REQUEST_QUOTE",
+      16: "GET_DIRECTIONS",
+      17: "OUTBOUND_CLICK",
+      18: "CONTACT",
+      19: "ENGAGEMENT",
+      20: "STORE_VISIT",
+      21: "STORE_SALE",
+      22: "QUALIFIED_LEAD",
+      23: "CONVERTED_LEAD",
+    };
+    const categoryMap = new Map<string, string>();
+    actionDefs.forEach((row: any) => {
+      if (row.conversion_action?.name) {
+        const cat = row.conversion_action.category;
+        const catStr = typeof cat === "number" ? (CATEGORY_LABELS[cat] || "UNSPECIFIED") : (cat || "UNSPECIFIED");
+        categoryMap.set(row.conversion_action.name, catStr);
+      }
+    });
+
+    // Then get metrics segmented by conversion_action_name within date range
+    const rows = await customer.query(`
+      SELECT
+        segments.conversion_action_name,
+        metrics.conversions,
+        metrics.conversions_value,
+        metrics.all_conversions
+      FROM campaign
+      WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+        AND campaign.status != 'REMOVED'
+      ORDER BY metrics.conversions DESC
+    `);
+
+    // Aggregate by conversion action name
+    const actionMap = new Map<string, ConversionActionMetrics>();
+    rows.forEach((row: any) => {
+      const name = row.segments?.conversion_action_name;
+      if (!name) return;
+      const category = categoryMap.get(name) || "UNSPECIFIED";
+      if (!actionMap.has(name)) {
+        actionMap.set(name, { name, category, conversions: 0, conversionValue: 0, allConversions: 0 });
+      }
+      const existing = actionMap.get(name)!;
+      existing.conversions += row.metrics?.conversions || 0;
+      existing.conversionValue += row.metrics?.conversions_value || 0;
+      existing.allConversions += row.metrics?.all_conversions || 0;
+    });
+
+    return Array.from(actionMap.values())
+      .filter(a => a.allConversions > 0)
+      .sort((a, b) => b.allConversions - a.allConversions);
+  } catch (error) {
+    console.error("[GoogleAds] Error fetching conversion actions:", error);
+    throw error;
+  }
+}
+
+// Fetch daily conversion breakdown by campaign
+export async function fetchConversionDailyMetrics(
+  startDate: string,
+  endDate: string
+): Promise<ConversionDailyMetrics[]> {
+  try {
+    const customer = getCustomer();
+
+    const rows = await customer.query(`
+      SELECT
+        segments.date,
+        campaign.name,
+        metrics.conversions,
+        metrics.all_conversions,
+        metrics.conversions_value
+      FROM campaign
+      WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+        AND campaign.status != 'REMOVED'
+      ORDER BY segments.date ASC
+    `);
+
+    return rows.map((row: any) => ({
+      date: row.segments?.date || "",
+      campaign: row.campaign?.name || "Unknown",
+      conversions: row.metrics?.conversions || 0,
+      allConversions: row.metrics?.all_conversions || 0,
+      conversionValue: row.metrics?.conversions_value || 0,
+    })).filter((r: ConversionDailyMetrics) => r.date !== "");
+  } catch (error) {
+    console.error("[GoogleAds] Error fetching conversion daily metrics:", error);
+    throw error;
+  }
+}
+
 // Check if API is configured
 export function isConfigured(): boolean {
   return !!(

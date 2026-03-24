@@ -7,6 +7,8 @@ import {
   fetchCampaignMetrics,
   fetchDailyMetrics,
   fetchKeywordMetrics,
+  fetchConversionActions,
+  fetchConversionDailyMetrics,
   isConfigured,
   testConnection,
 } from "./googleAds";
@@ -489,6 +491,26 @@ export const appRouter = router({
           : "Using mock data (Google Ads API not configured)",
       };
     }),
+
+    // Get Event Goals & Conversions data
+    getConversionEvents: publicProcedure
+      .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
+      .query(async ({ input }) => {
+        if (!isConfigured()) {
+          return { success: false, actions: [], dailyBreakdown: [], dataSource: "mock" as const };
+        }
+        try {
+          const { startDate, endDate } = getDateRange(input.dateRange);
+          const [actions, dailyBreakdown] = await Promise.all([
+            fetchConversionActions(startDate, endDate),
+            fetchConversionDailyMetrics(startDate, endDate),
+          ]);
+          return { success: true, actions, dailyBreakdown, dataSource: "live" as const };
+        } catch (error) {
+          console.error("[Dashboard] Error fetching conversion events:", error);
+          return { success: false, actions: [], dailyBreakdown: [], dataSource: "error" as const };
+        }
+      }),
   }),
 
   // Google Analytics router

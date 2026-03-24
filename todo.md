@@ -69,3 +69,11 @@
 - [x] Add Event Goals UI section to AnalyticsSection component
 - [x] Display key events (phone calls, form submissions, etc.)
 - [x] Test event goals integration
+
+## Event Goals & Conversions (Google Ads) - New Feature
+- [x] Add fetchConversionActions function to Google Ads API layer
+- [x] Add tRPC endpoint for conversion events by date range
+- [x] Build Event Goals & Conversions section in Dashboard with Daily/Weekly/Campaign views
+- [x] Add conversion trend line chart
+- [x] Add per-campaign conversion breakdown table
+- [x] Test with live Google Ads data

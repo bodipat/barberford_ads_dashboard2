@@ -391,6 +391,9 @@ export default function Dashboard() {
   // Fetch dashboard data
   const { data: dashboardData, isLoading, refetch } = trpc.dashboard.getData.useQuery({ dateRange });
 
+  // Fetch Event Goals & Conversions
+  const { data: conversionData, isLoading: convLoading } = trpc.dashboard.getConversionEvents.useQuery({ dateRange });
+
   // Sort handler
   const handleSort = (key: string) => {
     setSortConfig((prev) => ({
@@ -698,6 +701,166 @@ export default function Dashboard() {
         {/* Google Analytics Section */}
         <section>
           <AnalyticsSection />
+        </section>
+
+        {/* Event Goals & Conversions Section */}
+        <section>
+          <h2 className="text-lg font-semibold text-foreground mb-4">Event Goals &amp; Conversions</h2>
+          {convLoading ? (
+            <div className="chart-container flex items-center justify-center h-32">
+              <RefreshCw className="w-5 h-5 text-primary animate-spin mr-2" />
+              <span className="text-muted-foreground text-sm">Loading conversion data...</span>
+            </div>
+          ) : !conversionData?.success || (conversionData.actions.length === 0 && conversionData.dailyBreakdown.length === 0) ? (
+            <div className="chart-container flex flex-col items-center justify-center h-32 text-muted-foreground">
+              <Target className="w-8 h-8 mb-2 opacity-40" />
+              <p className="text-sm">No conversion data available for this period.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Conversion Actions Table */}
+              <div className="chart-container">
+                <h3 className="text-base font-semibold text-foreground mb-4">Conversion Actions</h3>
+                <div className="overflow-x-auto">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Event / Goal</th>
+                        <th>Category</th>
+                        <th className="text-right">Conversions</th>
+                        <th className="text-right">All Conv.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {conversionData.actions.map((action, i) => {
+                        const categoryColors: Record<string, string> = {
+                          PHONE_CALL: "text-green-400",
+                          SUBMIT_LEAD_FORM: "text-blue-400",
+                          PURCHASE: "text-yellow-400",
+                          PAGE_VIEW: "text-purple-400",
+                          DOWNLOAD: "text-orange-400",
+                        };
+                        const catColor = categoryColors[action.category] || "text-muted-foreground";
+                        const catLabel = action.category
+                          .replace(/_/g, " ")
+                          .toLowerCase()
+                          .replace(/\b\w/g, (c: string) => c.toUpperCase());
+                        return (
+                          <tr key={i}>
+                            <td className="font-medium text-foreground">{action.name}</td>
+                            <td><span className={`text-xs font-medium ${catColor}`}>{catLabel}</span></td>
+                            <td className="text-right font-semibold text-primary">{Math.round(action.conversions)}</td>
+                            <td className="text-right text-muted-foreground">{Math.round(action.allConversions)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Conversion Trend Chart */}
+              <div className="chart-container">
+                <h3 className="text-base font-semibold text-foreground mb-4">Conversion Trend</h3>
+                <div className="h-[260px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={(() => {
+                        // Aggregate daily breakdown by date
+                        const dateMap = new Map<string, { date: string; conversions: number; allConversions: number }>();
+                        conversionData.dailyBreakdown.forEach((row) => {
+                          if (!dateMap.has(row.date)) {
+                            dateMap.set(row.date, { date: row.date, conversions: 0, allConversions: 0 });
+                          }
+                          const d = dateMap.get(row.date)!;
+                          d.conversions += row.conversions;
+                          d.allConversions += row.allConversions;
+                        });
+                        return Array.from(dateMap.values())
+                          .sort((a, b) => a.date.localeCompare(b.date))
+                          .map(d => ({
+                            ...d,
+                            date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                            conversions: Math.round(d.conversions),
+                            allConversions: Math.round(d.allConversions),
+                          }));
+                      })()}
+                    >
+                      <defs>
+                        <linearGradient id="convGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={CHART_COLORS.gold} stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={CHART_COLORS.gold} stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="allConvGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={CHART_COLORS.teal} stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={CHART_COLORS.teal} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.3 0.01 285)" />
+                      <XAxis dataKey="date" stroke="oklch(0.6 0.015 285)" fontSize={11} tick={{ fill: "oklch(0.6 0.015 285)" }} />
+                      <YAxis stroke="oklch(0.6 0.015 285)" fontSize={11} tick={{ fill: "oklch(0.6 0.015 285)" }} />
+                      <RechartsTooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: '12px' }} />
+                      <Area type="monotone" dataKey="conversions" name="Conversions" stroke={CHART_COLORS.gold} fill="url(#convGrad)" strokeWidth={2} dot={false} />
+                      <Area type="monotone" dataKey="allConversions" name="All Conversions" stroke={CHART_COLORS.teal} fill="url(#allConvGrad)" strokeWidth={2} dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Per-Campaign Conversion Breakdown */}
+              <div className="chart-container lg:col-span-2">
+                <h3 className="text-base font-semibold text-foreground mb-4">Conversions by Campaign</h3>
+                <div className="overflow-x-auto">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Campaign</th>
+                        <th className="text-right">Conversions</th>
+                        <th className="text-right">All Conversions</th>
+                        <th className="text-right">Share</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const campMap = new Map<string, { campaign: string; conversions: number; allConversions: number }>();
+                        conversionData.dailyBreakdown.forEach((row) => {
+                          if (!campMap.has(row.campaign)) {
+                            campMap.set(row.campaign, { campaign: row.campaign, conversions: 0, allConversions: 0 });
+                          }
+                          const d = campMap.get(row.campaign)!;
+                          d.conversions += row.conversions;
+                          d.allConversions += row.allConversions;
+                        });
+                        const rows = Array.from(campMap.values()).sort((a, b) => b.allConversions - a.allConversions);
+                        const totalAll = rows.reduce((s, r) => s + r.allConversions, 0);
+                        return rows.map((row, i) => (
+                          <tr key={i}>
+                            <td className="font-medium text-foreground max-w-[260px] truncate">{row.campaign}</td>
+                            <td className="text-right font-semibold text-primary">{Math.round(row.conversions)}</td>
+                            <td className="text-right text-muted-foreground">{Math.round(row.allConversions)}</td>
+                            <td className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <div className="w-20 h-1.5 bg-border rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full"
+                                    style={{ width: `${totalAll > 0 ? (row.allConversions / totalAll) * 100 : 0}%`, background: CHART_COLORS.gold }}
+                                  />
+                                </div>
+                                <span className="text-xs text-muted-foreground w-10 text-right">
+                                  {totalAll > 0 ? ((row.allConversions / totalAll) * 100).toFixed(1) : 0}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Keywords Table */}
