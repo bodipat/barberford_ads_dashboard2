@@ -562,3 +562,207 @@ export function isConfigured(): boolean {
     ENV.googleAdsCustomerId
   );
 }
+
+// ─── Device Performance ───────────────────────────────────────────────────────
+export interface DeviceMetrics {
+  device: string; // "MOBILE" | "DESKTOP" | "TABLET"
+  clicks: number;
+  impressions: number;
+  conversions: number;
+  spend: number;
+  ctr: number;
+  conversionRate: number;
+  cpa: number;
+}
+
+export async function fetchDevicePerformance(startDate: string, endDate: string): Promise<DeviceMetrics[]> {
+  const customer = getCustomer();
+  const rows = await customer.query(`
+    SELECT
+      segments.device,
+      metrics.clicks,
+      metrics.impressions,
+      metrics.conversions,
+      metrics.cost_micros,
+      metrics.ctr
+    FROM campaign
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+  `);
+  const deviceMap: Record<string, DeviceMetrics> = {};
+  const deviceNames: Record<number, string> = { 2: "MOBILE", 3: "TABLET", 4: "DESKTOP" };
+  for (const row of rows) {
+    const deviceNum = row.segments?.device as number;
+    const device = deviceNames[deviceNum] || `DEVICE_${deviceNum}`;
+    if (!deviceMap[device]) {
+      deviceMap[device] = { device, clicks: 0, impressions: 0, conversions: 0, spend: 0, ctr: 0, conversionRate: 0, cpa: 0 };
+    }
+    deviceMap[device].clicks += row.metrics?.clicks || 0;
+    deviceMap[device].impressions += row.metrics?.impressions || 0;
+    deviceMap[device].conversions += row.metrics?.conversions || 0;
+    deviceMap[device].spend += (row.metrics?.cost_micros || 0) / 1e6;
+  }
+  return Object.values(deviceMap).map(d => ({
+    ...d,
+    spend: parseFloat(d.spend.toFixed(2)),
+    ctr: d.impressions > 0 ? parseFloat(((d.clicks / d.impressions) * 100).toFixed(2)) : 0,
+    conversionRate: d.clicks > 0 ? parseFloat(((d.conversions / d.clicks) * 100).toFixed(2)) : 0,
+    cpa: d.conversions > 0 ? parseFloat((d.spend / d.conversions).toFixed(2)) : 0,
+  })).sort((a, b) => b.clicks - a.clicks);
+}
+
+// ─── Search Terms ─────────────────────────────────────────────────────────────
+export interface SearchTermMetrics {
+  searchTerm: string;
+  campaignName: string;
+  clicks: number;
+  impressions: number;
+  conversions: number;
+  spend: number;
+  ctr: number;
+  cpc: number;
+}
+
+export async function fetchSearchTerms(startDate: string, endDate: string, limit = 20): Promise<SearchTermMetrics[]> {
+  const customer = getCustomer();
+  const rows = await customer.query(`
+    SELECT
+      search_term_view.search_term,
+      campaign.name,
+      metrics.clicks,
+      metrics.impressions,
+      metrics.conversions,
+      metrics.cost_micros,
+      metrics.ctr
+    FROM search_term_view
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+    ORDER BY metrics.clicks DESC
+    LIMIT ${limit}
+  `);
+  return rows.map(row => {
+    const spend = (row.metrics?.cost_micros || 0) / 1e6;
+    const clicks = row.metrics?.clicks || 0;
+    return {
+      searchTerm: row.search_term_view?.search_term || "",
+      campaignName: row.campaign?.name || "",
+      clicks,
+      impressions: row.metrics?.impressions || 0,
+      conversions: parseFloat((row.metrics?.conversions || 0).toFixed(2)),
+      spend: parseFloat(spend.toFixed(2)),
+      ctr: parseFloat(((row.metrics?.ctr || 0) * 100).toFixed(2)),
+      cpc: clicks > 0 ? parseFloat((spend / clicks).toFixed(2)) : 0,
+    };
+  });
+}
+
+// ─── Ad Copy Performance ──────────────────────────────────────────────────────
+export interface AdCopyMetrics {
+  adId: string;
+  headlines: string;
+  campaignName: string;
+  finalUrl: string;
+  clicks: number;
+  impressions: number;
+  conversions: number;
+  spend: number;
+  ctr: number;
+  cpc: number;
+  conversionRate: number;
+}
+
+export async function fetchAdCopyPerformance(startDate: string, endDate: string): Promise<AdCopyMetrics[]> {
+  const customer = getCustomer();
+  const rows = await customer.query(`
+    SELECT
+      ad_group_ad.ad.id,
+      ad_group_ad.ad.responsive_search_ad.headlines,
+      ad_group_ad.ad.expanded_text_ad.headline_part1,
+      ad_group_ad.ad.expanded_text_ad.headline_part2,
+      ad_group_ad.ad.final_urls,
+      campaign.name,
+      metrics.clicks,
+      metrics.impressions,
+      metrics.conversions,
+      metrics.ctr,
+      metrics.cost_micros
+    FROM ad_group_ad
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+    AND ad_group_ad.status = 'ENABLED'
+    ORDER BY metrics.clicks DESC
+    LIMIT 20
+  `);
+  return rows.map(row => {
+    const rsaHeadlines = row.ad_group_ad?.ad?.responsive_search_ad?.headlines;
+    const headlines = rsaHeadlines && rsaHeadlines.length > 0
+      ? rsaHeadlines.slice(0, 3).map((h: any) => h.text).filter(Boolean).join(" | ")
+      : [row.ad_group_ad?.ad?.expanded_text_ad?.headline_part1, row.ad_group_ad?.ad?.expanded_text_ad?.headline_part2].filter(Boolean).join(" | ") || "Ad";
+    const spend = (row.metrics?.cost_micros || 0) / 1e6;
+    const clicks = row.metrics?.clicks || 0;
+    const conversions = row.metrics?.conversions || 0;
+    return {
+      adId: String(row.ad_group_ad?.ad?.id || ""),
+      headlines,
+      campaignName: row.campaign?.name || "",
+      finalUrl: (row.ad_group_ad?.ad?.final_urls || [])[0] || "",
+      clicks,
+      impressions: row.metrics?.impressions || 0,
+      conversions: parseFloat(conversions.toFixed(2)),
+      spend: parseFloat(spend.toFixed(2)),
+      ctr: parseFloat(((row.metrics?.ctr || 0) * 100).toFixed(2)),
+      cpc: clicks > 0 ? parseFloat((spend / clicks).toFixed(2)) : 0,
+      conversionRate: clicks > 0 ? parseFloat(((conversions / clicks) * 100).toFixed(2)) : 0,
+    };
+  });
+}
+
+// ─── Impression Share ─────────────────────────────────────────────────────────
+export interface ImpressionShareMetrics {
+  campaignId: string;
+  campaignName: string;
+  impressionShare: number;
+  budgetLostIS: number;
+  rankLostIS: number;
+  clicks: number;
+  spend: number;
+}
+
+export async function fetchImpressionShare(startDate: string, endDate: string): Promise<ImpressionShareMetrics[]> {
+  const customer = getCustomer();
+  const rows = await customer.query(`
+    SELECT
+      campaign.id,
+      campaign.name,
+      metrics.search_impression_share,
+      metrics.search_budget_lost_impression_share,
+      metrics.search_rank_lost_impression_share,
+      metrics.clicks,
+      metrics.cost_micros
+    FROM campaign
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+    AND campaign.status = 'ENABLED'
+    ORDER BY metrics.search_impression_share DESC
+  `);
+  // Aggregate by campaign
+  const map: Record<string, ImpressionShareMetrics> = {};
+  for (const row of rows) {
+    const id = String(row.campaign?.id || "");
+    if (!map[id]) {
+      map[id] = {
+        campaignId: id,
+        campaignName: row.campaign?.name || "",
+        impressionShare: 0,
+        budgetLostIS: 0,
+        rankLostIS: 0,
+        clicks: 0,
+        spend: 0,
+      };
+    }
+    // IS fields are averages — take max across days as approximation
+    map[id].impressionShare = Math.max(map[id].impressionShare, parseFloat(((row.metrics?.search_impression_share || 0) * 100).toFixed(1)));
+    map[id].budgetLostIS = Math.max(map[id].budgetLostIS, parseFloat(((row.metrics?.search_budget_lost_impression_share || 0) * 100).toFixed(1)));
+    map[id].rankLostIS = Math.max(map[id].rankLostIS, parseFloat(((row.metrics?.search_rank_lost_impression_share || 0) * 100).toFixed(1)));
+    map[id].clicks += row.metrics?.clicks || 0;
+    map[id].spend += (row.metrics?.cost_micros || 0) / 1e6;
+  }
+  return Object.values(map).map(c => ({ ...c, spend: parseFloat(c.spend.toFixed(2)) }))
+    .sort((a, b) => b.impressionShare - a.impressionShare);
+}

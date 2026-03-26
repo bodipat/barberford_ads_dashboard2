@@ -11,6 +11,10 @@ import {
   fetchConversionDailyMetrics,
   fetchAccountBalance,
   fetchTopKeywordsByCampaign,
+  fetchDevicePerformance,
+  fetchSearchTerms,
+  fetchAdCopyPerformance,
+  fetchImpressionShare,
   isConfigured,
   testConnection,
 } from "./googleAds";
@@ -550,6 +554,62 @@ export const appRouter = router({
         } catch (error) {
           console.error("[Dashboard] Error fetching top keywords by campaign:", error);
           return { success: false, campaigns: [], dataSource: "error" as const };
+        }
+      }),
+
+    getDevicePerformance: publicProcedure
+      .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
+      .query(async ({ input }) => {
+        if (!isConfigured()) return { success: false, data: [], dataSource: "mock" as const };
+        try {
+          const { startDate, endDate } = getDateRange(input.dateRange);
+          const data = await fetchDevicePerformance(startDate, endDate);
+          return { success: true, data, dataSource: "live" as const };
+        } catch (error) {
+          console.error("[Dashboard] Error fetching device performance:", error);
+          return { success: false, data: [], dataSource: "error" as const };
+        }
+      }),
+
+    getSearchTerms: publicProcedure
+      .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]), limit: z.number().optional() }))
+      .query(async ({ input }) => {
+        if (!isConfigured()) return { success: false, data: [], dataSource: "mock" as const };
+        try {
+          const { startDate, endDate } = getDateRange(input.dateRange);
+          const data = await fetchSearchTerms(startDate, endDate, input.limit || 20);
+          return { success: true, data, dataSource: "live" as const };
+        } catch (error) {
+          console.error("[Dashboard] Error fetching search terms:", error);
+          return { success: false, data: [], dataSource: "error" as const };
+        }
+      }),
+
+    getAdCopyPerformance: publicProcedure
+      .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
+      .query(async ({ input }) => {
+        if (!isConfigured()) return { success: false, data: [], dataSource: "mock" as const };
+        try {
+          const { startDate, endDate } = getDateRange(input.dateRange);
+          const data = await fetchAdCopyPerformance(startDate, endDate);
+          return { success: true, data, dataSource: "live" as const };
+        } catch (error) {
+          console.error("[Dashboard] Error fetching ad copy performance:", error);
+          return { success: false, data: [], dataSource: "error" as const };
+        }
+      }),
+
+    getImpressionShare: publicProcedure
+      .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
+      .query(async ({ input }) => {
+        if (!isConfigured()) return { success: false, data: [], dataSource: "mock" as const };
+        try {
+          const { startDate, endDate } = getDateRange(input.dateRange);
+          const data = await fetchImpressionShare(startDate, endDate);
+          return { success: true, data, dataSource: "live" as const };
+        } catch (error) {
+          console.error("[Dashboard] Error fetching impression share:", error);
+          return { success: false, data: [], dataSource: "error" as const };
         }
       }),
   }),

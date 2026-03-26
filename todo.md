@@ -101,3 +101,16 @@
 - [x] Show keyword, clicks, impressions, CTR, CPC, conversions per row
 - [x] Highlight top performer with gold accent
 - [x] Test with live data and save checkpoint
+
+## Dashboard Re-Design (4-Section Layout)
+- [x] Section 1: High-Level Performance — Cost, Conversions, CPA, CTR with time comparison vs previous period
+- [x] Section 2: Campaign & Ad Group Breakdown — table with Impression Share, highlight high CPA campaigns
+- [x] Section 3: Optimization Insights — Search Terms Report, Device Performance, Ad Copy Performance, Location Performance
+- [x] Section 4: Quality & Relevance — Quality Score per keyword, Landing Page Experience
+- [x] Add time comparison toggle (vs previous 7 days / previous period)
+- [x] Add trend line charts (Line Chart) for key metrics
+- [x] Add conditional formatting (color highlight) in tables for anomaly detection
+- [x] Move Google Analytics data to separate "Analytics" sidebar menu page
+- [x] Add new sidebar nav item for Google Analytics page
+- [x] Add sidebar navigation using DashboardLayout component
+- [x] Test all sections with live data and save checkpoint
