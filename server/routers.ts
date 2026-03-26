@@ -10,6 +10,7 @@ import {
   fetchConversionActions,
   fetchConversionDailyMetrics,
   fetchAccountBalance,
+  fetchTopKeywordsByCampaign,
   isConfigured,
   testConnection,
 } from "./googleAds";
@@ -533,6 +534,22 @@ export const appRouter = router({
         } catch (error) {
           console.error("[Dashboard] Error fetching account balance:", error);
           return { success: false, balance: null, dataSource: "error" as const };
+        }
+      }),
+
+    getTopKeywordsByCampaign: publicProcedure
+      .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
+      .query(async ({ input }) => {
+        if (!isConfigured()) {
+          return { success: false, campaigns: [], dataSource: "mock" as const };
+        }
+        try {
+          const { startDate, endDate } = getDateRange(input.dateRange);
+          const campaigns = await fetchTopKeywordsByCampaign(startDate, endDate);
+          return { success: true, campaigns, dataSource: "live" as const };
+        } catch (error) {
+          console.error("[Dashboard] Error fetching top keywords by campaign:", error);
+          return { success: false, campaigns: [], dataSource: "error" as const };
         }
       }),
   }),

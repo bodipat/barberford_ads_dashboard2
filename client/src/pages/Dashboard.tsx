@@ -399,6 +399,9 @@ export default function Dashboard() {
   // Fetch Account Balance (always fetches current balance regardless of date range)
   const { data: balanceData, isLoading: balanceLoading } = trpc.dashboard.getAccountBalance.useQuery();
 
+  // Fetch Top Keywords per Campaign
+  const { data: topKwData, isLoading: topKwLoading } = trpc.dashboard.getTopKeywordsByCampaign.useQuery({ dateRange });
+
   // Sort handler
   const handleSort = (key: string) => {
     setSortConfig((prev) => ({
@@ -905,6 +908,104 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+          )}
+        </section>
+
+        {/* Top 10 Keywords per Campaign */}
+        <section>
+          <h2 className="text-lg font-semibold text-foreground mb-4">Top 10 Keywords by Campaign</h2>
+          {topKwLoading ? (
+            <div className="chart-container flex items-center justify-center h-32">
+              <RefreshCw className="w-5 h-5 text-primary animate-spin mr-2" />
+              <span className="text-muted-foreground text-sm">Loading keyword data...</span>
+            </div>
+          ) : !topKwData?.success || topKwData.campaigns.length === 0 ? (
+            <div className="chart-container flex flex-col items-center justify-center h-32 text-muted-foreground">
+              <BarChart3 className="w-8 h-8 mb-2 opacity-40" />
+              <p className="text-sm">No keyword data available for this period</p>
+            </div>
+          ) : (
+            <Tabs defaultValue={topKwData.campaigns[0]?.campaignId} className="w-full">
+              <TabsList className="flex flex-wrap h-auto gap-1 bg-card/50 border border-border/50 p-1 mb-4 rounded-xl">
+                {topKwData.campaigns.map((camp) => (
+                  <TabsTrigger
+                    key={camp.campaignId}
+                    value={camp.campaignId}
+                    className="text-xs px-3 py-1.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  >
+                    {camp.campaignName.length > 30 ? camp.campaignName.slice(0, 30) + "…" : camp.campaignName}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              {topKwData.campaigns.map((camp) => (
+                <TabsContent key={camp.campaignId} value={camp.campaignId}>
+                  <div className="chart-container">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-foreground truncate max-w-[70%]">{camp.campaignName}</h3>
+                      <Badge variant="outline" className="text-xs border-primary/40 text-primary">
+                        {camp.keywords.length} keywords
+                      </Badge>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th className="w-8">#</th>
+                            <th>Keyword</th>
+                            <th className="text-center">Match</th>
+                            <th className="text-right">Clicks</th>
+                            <th className="text-right">Impr.</th>
+                            <th className="text-right">CTR</th>
+                            <th className="text-right">CPC</th>
+                            <th className="text-right">Conv.</th>
+                            <th className="text-right">Spend</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {camp.keywords.map((kw) => (
+                            <tr key={kw.rank} className={kw.rank === 1 ? "bg-amber-500/5" : ""}>
+                              <td className="text-center">
+                                {kw.rank === 1 ? (
+                                  <span className="text-amber-400 font-bold text-base">🥇</span>
+                                ) : kw.rank === 2 ? (
+                                  <span className="text-slate-400 font-bold">🥈</span>
+                                ) : kw.rank === 3 ? (
+                                  <span className="text-amber-600 font-bold">🥉</span>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">{kw.rank}</span>
+                                )}
+                              </td>
+                              <td className="font-medium text-foreground max-w-[200px]">
+                                <span className={kw.rank === 1 ? "text-amber-400" : ""}>{kw.keyword}</span>
+                              </td>
+                              <td className="text-center">
+                                <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                  {kw.matchType === "EXACT" ? "Exact" : kw.matchType === "PHRASE" ? "Phrase" : kw.matchType === "BROAD" ? "Broad" : kw.matchType}
+                                </Badge>
+                              </td>
+                              <td className="text-right font-semibold text-primary">{kw.clicks.toLocaleString()}</td>
+                              <td className="text-right text-muted-foreground">{kw.impressions.toLocaleString()}</td>
+                              <td className="text-right">
+                                <span className={kw.ctr >= 5 ? "text-green-400" : kw.ctr >= 2 ? "text-yellow-400" : "text-muted-foreground"}>
+                                  {kw.ctr.toFixed(2)}%
+                                </span>
+                              </td>
+                              <td className="text-right text-muted-foreground">฿{kw.cpc.toFixed(2)}</td>
+                              <td className="text-right">
+                                <span className={kw.conversions > 0 ? "text-green-400 font-semibold" : "text-muted-foreground"}>
+                                  {Math.round(kw.conversions)}
+                                </span>
+                              </td>
+                              <td className="text-right text-muted-foreground">฿{kw.spend.toLocaleString("th-TH", { maximumFractionDigits: 0 })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </TabsContent>
+              ))}
+            </Tabs>
           )}
         </section>
 

@@ -214,6 +214,91 @@ export async function fetchKeywordMetrics(
   }
 }
 
+// Top keywords per campaign interface
+export interface TopKeywordByCampaign {
+  campaignId: string;
+  campaignName: string;
+  keywords: {
+    rank: number;
+    keyword: string;
+    matchType: string;
+    clicks: number;
+    impressions: number;
+    ctr: number;
+    cpc: number;
+    conversions: number;
+    conversionRate: number;
+    spend: number;
+  }[];
+}
+
+// Fetch top 10 keywords by clicks for each campaign
+export async function fetchTopKeywordsByCampaign(
+  startDate: string,
+  endDate: string
+): Promise<TopKeywordByCampaign[]> {
+  try {
+    const customer = getCustomer();
+
+    const rows = await customer.query(`
+      SELECT
+        campaign.id,
+        campaign.name,
+        ad_group_criterion.keyword.text,
+        ad_group_criterion.keyword.match_type,
+        metrics.clicks,
+        metrics.impressions,
+        metrics.ctr,
+        metrics.average_cpc,
+        metrics.conversions,
+        metrics.cost_micros
+      FROM keyword_view
+      WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+        AND campaign.status != 'REMOVED'
+        AND ad_group.status != 'REMOVED'
+        AND ad_group_criterion.status != 'REMOVED'
+        AND metrics.clicks > 0
+      ORDER BY campaign.id ASC, metrics.clicks DESC
+    `);
+
+    // Group by campaign and take top 10 per campaign
+    const campaignMap = new Map<string, TopKeywordByCampaign>();
+
+    for (const row of rows as any[]) {
+      const campaignId = row.campaign?.id?.toString() || "";
+      const campaignName = row.campaign?.name || "Unknown";
+
+      if (!campaignMap.has(campaignId)) {
+        campaignMap.set(campaignId, { campaignId, campaignName, keywords: [] });
+      }
+
+      const entry = campaignMap.get(campaignId)!;
+      if (entry.keywords.length < 10) {
+        const clicks = row.metrics?.clicks || 0;
+        const impressions = row.metrics?.impressions || 0;
+        const conversions = row.metrics?.conversions || 0;
+        entry.keywords.push({
+          rank: entry.keywords.length + 1,
+          keyword: row.ad_group_criterion?.keyword?.text || "Unknown",
+          matchType: row.ad_group_criterion?.keyword?.match_type || "UNKNOWN",
+          clicks,
+          impressions,
+          ctr: (row.metrics?.ctr || 0) * 100,
+          cpc: (row.metrics?.average_cpc || 0) / 1_000_000,
+          conversions,
+          conversionRate: clicks > 0 ? (conversions / clicks) * 100 : 0,
+          spend: (row.metrics?.cost_micros || 0) / 1_000_000,
+        });
+      }
+    }
+
+    return Array.from(campaignMap.values()).filter(c => c.keywords.length > 0);
+  } catch (error) {
+    console.error("[GoogleAds] Error fetching top keywords by campaign:", error);
+    throw error;
+  }
+}
+
 // Test API connection
 export async function testConnection(): Promise<{
   success: boolean;

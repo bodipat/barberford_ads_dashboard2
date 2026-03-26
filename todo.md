@@ -93,3 +93,11 @@
 - [x] Add Account Balance card to Dashboard UI (Executive Summary section)
 - [x] Show balance as of today with last-updated timestamp
 - [x] Test with live Google Ads data
+
+## Top 10 Best Click Keywords per Campaign
+- [x] Add fetchTopKeywordsByCampaign function to googleAds.ts
+- [x] Add tRPC endpoint dashboard.getTopKeywordsByCampaign
+- [x] Build Top Keywords section UI with campaign tabs
+- [x] Show keyword, clicks, impressions, CTR, CPC, conversions per row
+- [x] Highlight top performer with gold accent
+- [x] Test with live data and save checkpoint
