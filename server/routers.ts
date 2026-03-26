@@ -9,6 +9,7 @@ import {
   fetchKeywordMetrics,
   fetchConversionActions,
   fetchConversionDailyMetrics,
+  fetchAccountBalance,
   isConfigured,
   testConnection,
 } from "./googleAds";
@@ -518,6 +519,20 @@ export const appRouter = router({
         } catch (error) {
           console.error("[Dashboard] Error fetching conversion events:", error);
           return { success: false, actions: [], dailyBreakdown: [], dataSource: "error" as const };
+        }
+      }),
+
+    getAccountBalance: publicProcedure
+      .query(async () => {
+        if (!isConfigured()) {
+          return { success: false, balance: null, dataSource: "mock" as const };
+        }
+        try {
+          const balance = await fetchAccountBalance();
+          return { success: true, balance, dataSource: "live" as const };
+        } catch (error) {
+          console.error("[Dashboard] Error fetching account balance:", error);
+          return { success: false, balance: null, dataSource: "error" as const };
         }
       }),
   }),

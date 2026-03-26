@@ -86,3 +86,10 @@
 - [x] Fix Daily/Weekly/Campaign to Date selector not updating data across all sections
 - [x] Extend Campaign to Date start date to Dec 17, 2025 (actual campaign start)
 - [x] Ensure Event Goals & Conversions section also responds to date range changes
+
+## Account Balance Display
+- [x] Add fetchAccountBalance function to googleAds.ts
+- [x] Add tRPC endpoint dashboard.getAccountBalance
+- [x] Add Account Balance card to Dashboard UI (Executive Summary section)
+- [x] Show balance as of today with last-updated timestamp
+- [x] Test with live Google Ads data

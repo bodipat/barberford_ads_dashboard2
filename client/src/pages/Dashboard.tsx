@@ -25,6 +25,8 @@ import {
   ChevronDown,
   Info,
   Globe,
+  Wallet,
+  Clock,
 } from "lucide-react";
 import AnalyticsSection from "@/components/AnalyticsSection";
 import {
@@ -394,6 +396,9 @@ export default function Dashboard() {
   // Fetch Event Goals & Conversions
   const { data: conversionData, isLoading: convLoading } = trpc.dashboard.getConversionEvents.useQuery({ dateRange });
 
+  // Fetch Account Balance (always fetches current balance regardless of date range)
+  const { data: balanceData, isLoading: balanceLoading } = trpc.dashboard.getAccountBalance.useQuery();
+
   // Sort handler
   const handleSort = (key: string) => {
     setSortConfig((prev) => ({
@@ -500,6 +505,46 @@ export default function Dashboard() {
         {/* KPI Cards */}
         <section>
           <h2 className="text-lg font-semibold text-foreground mb-4">Executive Summary</h2>
+          {/* Account Balance Card */}
+          {(balanceData?.success && balanceData.balance) ? (
+            <div className="mb-4 p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                  <Wallet className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Account Balance — {balanceData.balance.accountName}</p>
+                  <div className="flex items-baseline gap-2 mt-0.5">
+                    {balanceData.balance.hasUnlimitedBudget ? (
+                      <span className="text-xl font-bold text-amber-400">Unlimited Budget</span>
+                    ) : (
+                      <>
+                        <span className="text-2xl font-bold text-amber-400">
+                          ฿{balanceData.balance.remainingBalance.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
+                        <span className="text-sm text-muted-foreground">remaining</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col sm:items-end gap-1 pl-13 sm:pl-0">
+                {!balanceData.balance.hasUnlimitedBudget && (
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="text-muted-foreground">Approved Limit: <span className="text-foreground font-medium">฿{balanceData.balance.approvedSpendingLimit.toLocaleString("th-TH", { maximumFractionDigits: 0 })}</span></span>
+                    <span className="text-muted-foreground">Spent: <span className="text-foreground font-medium">฿{balanceData.balance.amountServed.toLocaleString("th-TH", { maximumFractionDigits: 0 })}</span></span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock className="w-3 h-3" />
+                  <span>As of {new Date(balanceData.balance.asOf).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                </div>
+              </div>
+            </div>
+          ) : balanceLoading ? (
+            <div className="mb-4 h-16 rounded-xl border border-border/50 bg-card/30 animate-pulse" />
+          ) : null}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <KPICard
               title="Total Spend"

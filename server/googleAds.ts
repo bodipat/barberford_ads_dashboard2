@@ -393,6 +393,80 @@ export async function fetchConversionDailyMetrics(
   }
 }
 
+// Account balance interface
+export interface AccountBalance {
+  accountName: string;
+  currencyCode: string;
+  approvedSpendingLimit: number;   // THB
+  amountServed: number;            // THB (total spent against this budget)
+  remainingBalance: number;        // THB (approvedLimit - amountServed + adjustments)
+  hasUnlimitedBudget: boolean;
+  asOf: string;                    // ISO date string
+}
+
+// Fetch account balance from Google Ads
+export async function fetchAccountBalance(): Promise<AccountBalance> {
+  try {
+    const customer = getCustomer();
+
+    // Get customer info (name + currency)
+    const customerRows = await customer.query(`
+      SELECT
+        customer.id,
+        customer.descriptive_name,
+        customer.currency_code
+      FROM customer
+      LIMIT 1
+    `);
+    const customerInfo = customerRows[0]?.customer as any;
+
+    // Get account budget (most recent active or approved)
+    const budgetRows = await customer.query(`
+      SELECT
+        account_budget.id,
+        account_budget.status,
+        account_budget.approved_spending_limit_micros,
+        account_budget.approved_spending_limit_type,
+        account_budget.amount_served_micros,
+        account_budget.total_adjustments_micros
+      FROM account_budget
+      ORDER BY account_budget.id DESC
+      LIMIT 5
+    `);
+
+    // Pick the most relevant budget (status 2 = APPROVED, 3 = CANCELLED but use latest)
+    const budget = (budgetRows[0]?.account_budget as any);
+
+    const MICROS = 1_000_000;
+    const approvedLimit = budget?.approved_spending_limit_micros
+      ? Number(budget.approved_spending_limit_micros) / MICROS
+      : 0;
+    const amountServed = budget?.amount_served_micros
+      ? Number(budget.amount_served_micros) / MICROS
+      : 0;
+    const adjustments = budget?.total_adjustments_micros
+      ? Number(budget.total_adjustments_micros) / MICROS
+      : 0;
+
+    // approved_spending_limit_type 2 = INFINITE (unlimited budget)
+    const isUnlimited = budget?.approved_spending_limit_type === 2;
+    const remaining = isUnlimited ? Infinity : Math.max(0, approvedLimit + adjustments - amountServed);
+
+    return {
+      accountName: customerInfo?.descriptive_name || "Barberford",
+      currencyCode: customerInfo?.currency_code || "THB",
+      approvedSpendingLimit: approvedLimit,
+      amountServed,
+      remainingBalance: isUnlimited ? -1 : remaining,
+      hasUnlimitedBudget: isUnlimited,
+      asOf: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("[GoogleAds] Error fetching account balance:", error);
+    throw error;
+  }
+}
+
 // Check if API is configured
 export function isConfigured(): boolean {
   return !!(
