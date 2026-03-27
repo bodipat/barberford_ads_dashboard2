@@ -1,25 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeAll } from "vitest";
 import { appRouter } from "./routers";
-import type { TrpcContext } from "./_core/context";
+import { makeAuthCtx } from "./testHelpers";
 
-function createTestContext(): TrpcContext {
-  return {
-    user: null,
-    req: {
-      protocol: "https",
-      headers: {},
-    } as TrpcContext["req"],
-    res: {
-      clearCookie: () => {},
-    } as TrpcContext["res"],
-  };
-}
+let caller: ReturnType<typeof appRouter.createCaller>;
+
+beforeAll(async () => {
+  const ctx = await makeAuthCtx();
+  caller = appRouter.createCaller(ctx);
+});
 
 describe("dashboard.getData", () => {
   it("returns valid KPI data structure", async () => {
-    const ctx = createTestContext();
-    const caller = appRouter.createCaller(ctx);
-
     const result = await caller.dashboard.getData({ dateRange: "campaign" });
 
     // Verify KPI structure
@@ -33,14 +24,11 @@ describe("dashboard.getData", () => {
   });
 
   it("returns three campaigns for Erawan, Noir, and Reserve", async () => {
-    const ctx = createTestContext();
-    const caller = appRouter.createCaller(ctx);
-
     const result = await caller.dashboard.getData({ dateRange: "campaign" });
 
     // Real API returns actual campaigns (may vary in count)
     expect(result.campaigns.length).toBeGreaterThan(0);
-    
+
     // Verify campaigns have location field
     const locations = result.campaigns.map((c) => c.location);
     expect(locations.length).toBeGreaterThan(0);
@@ -61,9 +49,6 @@ describe("dashboard.getData", () => {
   });
 
   it("returns daily trends data", async () => {
-    const ctx = createTestContext();
-    const caller = appRouter.createCaller(ctx);
-
     const result = await caller.dashboard.getData({ dateRange: "campaign" });
 
     expect(result.dailyTrends).toBeDefined();
@@ -79,9 +64,6 @@ describe("dashboard.getData", () => {
   });
 
   it("returns keywords data with quality scores", async () => {
-    const ctx = createTestContext();
-    const caller = appRouter.createCaller(ctx);
-
     const result = await caller.dashboard.getData({ dateRange: "campaign" });
 
     expect(result.keywords).toBeDefined();
@@ -103,9 +85,6 @@ describe("dashboard.getData", () => {
   });
 
   it("returns alerts array", async () => {
-    const ctx = createTestContext();
-    const caller = appRouter.createCaller(ctx);
-
     const result = await caller.dashboard.getData({ dateRange: "campaign" });
 
     expect(result.alerts).toBeDefined();
@@ -121,9 +100,6 @@ describe("dashboard.getData", () => {
   });
 
   it("accepts different date range options", async () => {
-    const ctx = createTestContext();
-    const caller = appRouter.createCaller(ctx);
-
     // Test all date range options
     const dailyResult = await caller.dashboard.getData({ dateRange: "daily" });
     expect(dailyResult.kpi).toBeDefined();

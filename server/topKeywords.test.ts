@@ -1,15 +1,31 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
+import { appRouter } from "./routers";
+import { makeAuthCtx } from "./testHelpers";
 
-// Mock googleAds module
 vi.mock("./googleAds", () => ({
   isConfigured: vi.fn(),
   fetchTopKeywordsByCampaign: vi.fn(),
+  fetchCampaignMetrics: vi.fn(),
+  fetchDailyMetrics: vi.fn(),
+  fetchKeywordMetrics: vi.fn(),
+  fetchConversionActions: vi.fn(),
+  fetchConversionDailyMetrics: vi.fn(),
+  fetchAccountBalance: vi.fn(),
+  fetchDevicePerformance: vi.fn(),
+  fetchSearchTerms: vi.fn(),
+  fetchAdCopyPerformance: vi.fn(),
+  fetchImpressionShare: vi.fn(),
+  testConnection: vi.fn(),
 }));
 
 import { isConfigured, fetchTopKeywordsByCampaign } from "./googleAds";
-import { appRouter } from "./routers";
 
-const caller = appRouter.createCaller({ user: null } as any);
+let caller: ReturnType<typeof appRouter.createCaller>;
+
+beforeAll(async () => {
+  const ctx = await makeAuthCtx();
+  caller = appRouter.createCaller(ctx);
+});
 
 describe("dashboard.getTopKeywordsByCampaign", () => {
   beforeEach(() => {

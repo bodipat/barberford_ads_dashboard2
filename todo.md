@@ -114,3 +114,15 @@
 - [x] Add new sidebar nav item for Google Analytics page
 - [x] Add sidebar navigation using DashboardLayout component
 - [x] Test all sections with live data and save checkpoint
+
+## Custom Login System (Username/Password)
+- [x] Store DASHBOARD_USERNAME and DASHBOARD_PASSWORD as secrets
+- [x] Create server-side login tRPC procedure (verify credentials, issue JWT session cookie)
+- [x] Create server-side logout procedure (clear session cookie)
+- [x] Create server-side auth check procedure (verify session cookie)
+- [x] Protect all dashboard/analytics API endpoints with auth middleware
+- [x] Build login page UI (username + password form, error handling)
+- [x] Replace Manus OAuth flow with custom login in DashboardLayout
+- [x] Remove Manus OAuth dependency from frontend
+- [x] Write vitest tests for login/logout/auth check
+- [x] Test full login flow end-to-end and save checkpoint

@@ -1,8 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { appRouter } from "./routers";
-import type { TrpcContext } from "./_core/context";
+import { makeAuthCtx } from "./testHelpers";
 
-const caller = appRouter.createCaller({ user: null } as TrpcContext);
+let caller: ReturnType<typeof appRouter.createCaller>;
+
+beforeAll(async () => {
+  const ctx = await makeAuthCtx();
+  caller = appRouter.createCaller(ctx);
+});
 
 describe("dashboard.getAccountBalance", () => {
   it("returns a result object with success and dataSource fields", async () => {

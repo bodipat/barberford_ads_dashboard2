@@ -1,7 +1,9 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, dashboardProcedure, router } from "./_core/trpc";
+import { SignJWT } from "jose";
+import { ENV } from "./_core/env";
 import { z } from "zod";
 import {
   fetchCampaignMetrics,
@@ -448,18 +450,56 @@ async function fetchRealDashboardData(dateRange: string) {
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    // Custom username/password login — issues a dashboard_session JWT cookie
+    login: publicProcedure
+      .input(z.object({ username: z.string(), password: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const { username, password } = input;
+        const validUser = ENV.dashboardUsername || "barberford";
+        const validPass = ENV.dashboardPassword || "bbf-erawan";
+        if (username !== validUser || password !== validPass) {
+          throw new Error("Invalid username or password");
+        }
+        const secret = new TextEncoder().encode(ENV.cookieSecret || "dashboard_secret_fallback");
+        const token = await new SignJWT({ username })
+          .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+          .setExpirationTime("30d")
+          .sign(secret);
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie("dashboard_session", token, {
+          ...cookieOptions,
+          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        });
+        return { success: true } as const;
+      }),
+
+    // Check if current session is valid
+    me: publicProcedure.query(async ({ ctx }) => {
+      const { parse: parseCookieHeader } = await import("cookie");
+      const { jwtVerify } = await import("jose");
+      const cookieHeader = ctx.req.headers.cookie ?? "";
+      const cookies = parseCookieHeader(cookieHeader);
+      const token = cookies["dashboard_session"];
+      if (!token) return null;
+      try {
+        const secret = new TextEncoder().encode(ENV.cookieSecret || "dashboard_secret_fallback");
+        const { payload } = await jwtVerify(token, secret, { algorithms: ["HS256"] });
+        return { username: payload.username as string };
+      } catch {
+        return null;
+      }
+    }),
+
+    // Logout — clears the dashboard_session cookie
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      ctx.res.clearCookie("dashboard_session", { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
     }),
   }),
 
   dashboard: router({
-    getData: publicProcedure
+    getData: dashboardProcedure
       .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
       .query(async ({ input }) => {
         // Check if Google Ads API is configured
@@ -481,7 +521,7 @@ export const appRouter = router({
       }),
 
     // Test API connection endpoint
-    testConnection: publicProcedure.query(async () => {
+    testConnection: dashboardProcedure.query(async () => {
       if (!isConfigured()) {
         return {
           success: false,
@@ -498,7 +538,7 @@ export const appRouter = router({
     }),
 
     // Get API status
-    getStatus: publicProcedure.query(() => {
+    getStatus: dashboardProcedure.query(() => {
       return {
         configured: isConfigured(),
         message: isConfigured() 
@@ -508,7 +548,7 @@ export const appRouter = router({
     }),
 
     // Get Event Goals & Conversions data
-    getConversionEvents: publicProcedure
+    getConversionEvents: dashboardProcedure
       .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
       .query(async ({ input }) => {
         if (!isConfigured()) {
@@ -527,7 +567,7 @@ export const appRouter = router({
         }
       }),
 
-    getAccountBalance: publicProcedure
+    getAccountBalance: dashboardProcedure
       .query(async () => {
         if (!isConfigured()) {
           return { success: false, balance: null, dataSource: "mock" as const };
@@ -541,7 +581,7 @@ export const appRouter = router({
         }
       }),
 
-    getTopKeywordsByCampaign: publicProcedure
+    getTopKeywordsByCampaign: dashboardProcedure
       .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
       .query(async ({ input }) => {
         if (!isConfigured()) {
@@ -557,7 +597,7 @@ export const appRouter = router({
         }
       }),
 
-    getDevicePerformance: publicProcedure
+    getDevicePerformance: dashboardProcedure
       .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
       .query(async ({ input }) => {
         if (!isConfigured()) return { success: false, data: [], dataSource: "mock" as const };
@@ -571,7 +611,7 @@ export const appRouter = router({
         }
       }),
 
-    getSearchTerms: publicProcedure
+    getSearchTerms: dashboardProcedure
       .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]), limit: z.number().optional() }))
       .query(async ({ input }) => {
         if (!isConfigured()) return { success: false, data: [], dataSource: "mock" as const };
@@ -585,7 +625,7 @@ export const appRouter = router({
         }
       }),
 
-    getAdCopyPerformance: publicProcedure
+    getAdCopyPerformance: dashboardProcedure
       .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
       .query(async ({ input }) => {
         if (!isConfigured()) return { success: false, data: [], dataSource: "mock" as const };
@@ -599,7 +639,7 @@ export const appRouter = router({
         }
       }),
 
-    getImpressionShare: publicProcedure
+    getImpressionShare: dashboardProcedure
       .input(z.object({ dateRange: z.enum(["daily", "weekly", "campaign"]) }))
       .query(async ({ input }) => {
         if (!isConfigured()) return { success: false, data: [], dataSource: "mock" as const };
@@ -617,7 +657,7 @@ export const appRouter = router({
   // Google Analytics router
   analytics: router({
     // Get overview metrics
-    getOverview: publicProcedure
+    getOverview: dashboardProcedure
       .input(z.object({ 
         startDate: z.string().optional().default("30daysAgo"),
         endDate: z.string().optional().default("today")
@@ -637,7 +677,7 @@ export const appRouter = router({
       }),
 
     // Get traffic sources
-    getTrafficSources: publicProcedure
+    getTrafficSources: dashboardProcedure
       .input(z.object({ 
         startDate: z.string().optional().default("30daysAgo"),
         endDate: z.string().optional().default("today")
@@ -657,7 +697,7 @@ export const appRouter = router({
       }),
 
     // Get daily metrics for trend charts
-    getDailyMetrics: publicProcedure
+    getDailyMetrics: dashboardProcedure
       .input(z.object({ 
         startDate: z.string().optional().default("30daysAgo"),
         endDate: z.string().optional().default("today")
@@ -677,7 +717,7 @@ export const appRouter = router({
       }),
 
     // Get channel breakdown (Organic vs Paid etc)
-    getChannelBreakdown: publicProcedure
+    getChannelBreakdown: dashboardProcedure
       .input(z.object({ 
         startDate: z.string().optional().default("30daysAgo"),
         endDate: z.string().optional().default("today")
@@ -697,13 +737,13 @@ export const appRouter = router({
       }),
 
     // Test GA4 connection
-    testConnection: publicProcedure.query(async () => {
+    testConnection: dashboardProcedure.query(async () => {
       const result = await testGAConnection();
       return result;
     }),
 
     // Get event goals / key events
-    getEventGoals: publicProcedure
+    getEventGoals: dashboardProcedure
       .input(z.object({ 
         startDate: z.string().optional().default("30daysAgo"),
         endDate: z.string().optional().default("today")
@@ -723,7 +763,7 @@ export const appRouter = router({
       }),
 
     // Get conversion events only (key events marked in GA4)
-    getConversionEvents: publicProcedure
+    getConversionEvents: dashboardProcedure
       .input(z.object({ 
         startDate: z.string().optional().default("30daysAgo"),
         endDate: z.string().optional().default("today")
@@ -743,7 +783,7 @@ export const appRouter = router({
       }),
 
     // Get combined dashboard data (GA + Ads)
-    getCombinedData: publicProcedure
+    getCombinedData: dashboardProcedure
       .input(z.object({ 
         startDate: z.string().optional().default("30daysAgo"),
         endDate: z.string().optional().default("today")
