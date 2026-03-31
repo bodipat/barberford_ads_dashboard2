@@ -138,3 +138,10 @@
 - [x] Check timezone handling (Bangkok UTC+7 vs UTC) — server was UTC+4, causing date to compute as tomorrow
 - [x] Fix root cause — replaced manual offset arithmetic with Intl.DateTimeFormat Asia/Bangkok
 - [x] Save checkpoint
+
+## Daily Automated Report (Scheduled)
+- [x] Add generateDailyReport tRPC procedure — fetches today's live data (campaigns, keywords, search terms, devices, impression share, conversions)
+- [x] Integrate LLM analysis — generates Thai-language report with summary, best campaign, issues, keyword insights, and tomorrow's action items
+- [x] Send Manus owner notification with report title showing date, spend, and conversions
+- [x] Set up scheduled task to run every day at 20:30 Bangkok time (13:30 UTC)
+- [x] Test end-to-end — confirmed report generated and notification sent successfully
