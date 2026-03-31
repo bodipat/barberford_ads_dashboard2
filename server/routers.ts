@@ -29,6 +29,8 @@ import {
   getEventGoals,
   getConversionEvents,
 } from "./googleAnalytics";
+import { invokeLLM } from "./_core/llm";
+import { notifyOwner } from "./_core/notification";
 
 // Mock data generation for Google Ads Dashboard (fallback when API not available)
 function generateMockDashboardData(dateRange: string) {
@@ -659,6 +661,141 @@ export const appRouter = router({
           console.error("[Dashboard] Error fetching impression share:", error);
           return { success: false, data: [], dataSource: "error" as const };
         }
+      }),
+
+    // ─── Daily Report Generator ───────────────────────────────────────────────
+    // Called by the scheduled task every day at 20:30 Bangkok time.
+    // Fetches today's live data, asks LLM to analyse it, then pushes a
+    // Manus owner notification with the Thai-language report.
+    generateDailyReport: publicProcedure
+      .input(z.object({ secret: z.string() }))
+      .mutation(async ({ input }) => {
+        // Simple shared secret to prevent unauthorised triggers
+        const REPORT_SECRET = process.env.REPORT_SECRET || "barberford-daily-report";
+        if (input.secret !== REPORT_SECRET) {
+          throw new Error("Unauthorized");
+        }
+
+        if (!isConfigured()) {
+          return { success: false, message: "Google Ads API not configured" };
+        }
+
+        const today = getBangkokDateString(new Date());
+
+        // Fetch all relevant data for today in parallel
+        const [campaigns, keywords, searchTerms, devices, impressionShare, conversionActions] =
+          await Promise.all([
+            fetchCampaignMetrics(today, today).catch(() => []),
+            fetchKeywordMetrics(today, today).catch(() => []),
+            fetchSearchTerms(today, today, 30).catch(() => []),
+            fetchDevicePerformance(today, today).catch(() => []),
+            fetchImpressionShare(today, today).catch(() => []),
+            fetchConversionActions(today, today).catch(() => []),
+          ]);
+
+        // ── Build compact data summary for LLM ──────────────────────────────
+        const totalSpend = campaigns.reduce((s, c) => s + c.spend, 0);
+        const totalConversions = campaigns.reduce((s, c) => s + c.conversions, 0);
+        const totalClicks = campaigns.reduce((s, c) => s + c.clicks, 0);
+        const totalImpressions = campaigns.reduce((s, c) => s + c.impressions, 0);
+        const overallCTR = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : "0";
+        const overallCPA = totalConversions > 0 ? (totalSpend / totalConversions).toFixed(0) : "N/A";
+
+        const campaignSummary = campaigns
+          .filter(c => c.spend > 0)
+          .map(c => {
+            const is = impressionShare.find(i => i.campaignName === c.name);
+            return [
+              `แคมเปญ: ${c.name}`,
+              `  ใช้งบ: ฿${c.spend.toFixed(0)} | Impr: ${c.impressions} | Clicks: ${c.clicks} | CTR: ${c.ctr.toFixed(1)}%`,
+              `  Conv: ${c.conversions} | CPA: ${c.conversions > 0 ? (c.spend / c.conversions).toFixed(0) : "N/A"}`,
+              is ? `  IS: ${is.impressionShare}% | Budget Lost: ${is.budgetLostIS}% | Rank Lost: ${is.rankLostIS}%` : "",
+            ].filter(Boolean).join("\n");
+          })
+          .join("\n\n");
+
+        const topKeywords = keywords
+          .filter(k => k.clicks > 0)
+          .sort((a, b) => b.cpc * b.clicks - a.cpc * a.clicks)
+          .slice(0, 15)
+          .map(k => `"${k.keyword}" QS=${k.qualityScore || "N/A"} Clicks=${k.clicks} CTR=${k.ctr.toFixed(1)}% CPC=฿${k.cpc.toFixed(0)} Conv=${k.conversions}`)
+          .join("\n");
+
+        const topSearchTerms = searchTerms
+          .slice(0, 15)
+          .map(s => `"${s.searchTerm}" [${s.campaignName.substring(0, 20)}] Clicks=${s.clicks} Cost=฿${s.spend.toFixed(0)} Conv=${s.conversions}`)
+          .join("\n");
+
+        const deviceSummary = devices
+          .map(d => `${d.device}: Clicks=${d.clicks} Conv=${d.conversions} CPA=฿${d.cpa}`)
+          .join(" | ");
+
+        const convSummary = conversionActions.length > 0
+          ? conversionActions.map(a => `${a.name}: ${a.conversions} conv`).join(" | ")
+          : "ไม่มี Conversion วันนี้";
+
+        const dataForLLM = `
+วันที่: ${today} (เวลาไทย)
+
+=== ภาพรวม ===
+ใช้งบรวม: ฿${totalSpend.toFixed(0)}
+Impressions: ${totalImpressions}
+Clicks: ${totalClicks}
+CTR: ${overallCTR}%
+Conversions: ${totalConversions}
+CPA: ฿${overallCPA}
+
+=== แคมเปญ ===
+${campaignSummary || "ไม่มีข้อมูล"}
+
+=== Keywords ที่ใช้งบสูงสุด ===
+${topKeywords || "ไม่มีข้อมูล"}
+
+=== Search Terms ===
+${topSearchTerms || "ไม่มีข้อมูล"}
+
+=== Device ===
+${deviceSummary || "ไม่มีข้อมูล"}
+
+=== Conversions ===
+${convSummary}
+`;
+
+        // ── Ask LLM to generate Thai report ─────────────────────────────────
+        const llmResult = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: `คุณเป็นผู้เชี่ยวชาญ Google Ads สำหรับ Barberford ร้านตัดผมชายระดับพรีเมียมในกรุงเทพฯ
+หน้าที่ของคุณคือวิเคราะห์ข้อมูล Ads ประจำวัน และเขียนรายงานสรุปเป็นภาษาไทยที่กระชับ อ่านง่าย และให้คำแนะนำที่นำไปปฏิบัติได้จริงทันที
+
+รูปแบบรายงาน:
+1. 📊 สรุปภาพรวมวันนี้ (2-3 ประโยค)
+2. 🏆 แคมเปญที่ดีที่สุดวันนี้
+3. ⚠️ ปัญหาที่พบ (เรียงตามความสำคัญ)
+4. 🔑 Keywords น่าสังเกต (QS ต่ำ / CPC แพง / Search term แปลก)
+5. ✅ สิ่งที่ควรทำวันพรุ่งนี้ (3-5 ข้อ ระบุชื่อ keyword/แคมเปญให้ชัดเจน)
+
+เขียนให้กระชับ ตรงประเด็น ไม่ต้องอธิบายนิยามพื้นฐาน เจ้าของร้านอ่านเองทุกวัน`,
+            },
+            {
+              role: "user",
+              content: `นี่คือข้อมูล Google Ads ของ Barberford วันนี้:\n\n${dataForLLM}\n\nกรุณาวิเคราะห์และเขียนรายงานประจำวัน`,
+            },
+          ],
+        });
+
+        const reportText =
+          typeof llmResult.choices[0]?.message?.content === "string"
+            ? llmResult.choices[0].message.content
+            : "ไม่สามารถสร้างรายงานได้";
+
+        // ── Send notification ────────────────────────────────────────────────
+        const title = `📊 Barberford Ads Report — ${today} | ฿${totalSpend.toFixed(0)} | ${totalConversions} Conv`;
+        await notifyOwner({ title, content: reportText });
+
+        console.log(`[DailyReport] Sent report for ${today}: ฿${totalSpend.toFixed(0)}, ${totalConversions} conversions`);
+        return { success: true, date: today, totalSpend, totalConversions, reportText };
       }),
   }),
 

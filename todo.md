@@ -137,4 +137,4 @@
 - [x] Diagnose date range query for "Daily" / today view
 - [x] Check timezone handling (Bangkok UTC+7 vs UTC) — server was UTC+4, causing date to compute as tomorrow
 - [x] Fix root cause — replaced manual offset arithmetic with Intl.DateTimeFormat Asia/Bangkok
-- [ ] Save checkpoint
+- [x] Save checkpoint
