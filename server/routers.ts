@@ -228,12 +228,22 @@ function generateMockDashboardData(dateRange: string) {
 const CAMPAIGN_START_DATE = "2025-12-17";
 
 // Get date range based on selection
+function getBangkokDateString(date: Date): string {
+  // Use Intl.DateTimeFormat to reliably get the current date in Bangkok (Asia/Bangkok = UTC+7)
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(date);
+}
+
+function getBangkokDateOffset(date: Date, days: number): string {
+  // Shift by N days relative to Bangkok date
+  const bangkokStr = getBangkokDateString(date);
+  const d = new Date(bangkokStr + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
 function getDateRange(dateRange: string): { startDate: string; endDate: string } {
-  const today = new Date();
-  // Use Bangkok timezone offset (UTC+7) to get correct local date
-  const bangkokOffset = 7 * 60;
-  const localDate = new Date(today.getTime() + (bangkokOffset + today.getTimezoneOffset()) * 60000);
-  const endDate = localDate.toISOString().split("T")[0];
+  const now = new Date();
+  const endDate = getBangkokDateString(now); // today in Bangkok
 
   let startDate: string;
   switch (dateRange) {
@@ -244,9 +254,7 @@ function getDateRange(dateRange: string): { startDate: string; endDate: string }
     }
     case "weekly": {
       // Last 7 days
-      const weekAgo = new Date(localDate);
-      weekAgo.setDate(weekAgo.getDate() - 6);
-      startDate = weekAgo.toISOString().split("T")[0];
+      startDate = getBangkokDateOffset(now, -6);
       break;
     }
     case "campaign":

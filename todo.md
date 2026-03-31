@@ -128,7 +128,13 @@
 - [x] Test full login flow end-to-end and save checkpoint
 
 ## Bug Fix: Dashboard Shows Demo Data Instead of Real Data
-- [ ] Diagnose why dashboard shows "Demo Data" badge and fallback data
-- [ ] Fix root cause (API error, auth issue, or fallback logic)
-- [ ] Verify real data loads correctly
+- [x] Diagnose why dashboard shows "Demo Data" badge and fallback data
+- [x] Fix root cause (API error, auth issue, or fallback logic) — invalid_grant: Refresh Token expired
+- [x] Verify real data loads correctly — 42/42 tests pass
+- [x] Save checkpoint
+
+## Bug Fix: Today's Ads Data Not Showing (Daily View)
+- [x] Diagnose date range query for "Daily" / today view
+- [x] Check timezone handling (Bangkok UTC+7 vs UTC) — server was UTC+4, causing date to compute as tomorrow
+- [x] Fix root cause — replaced manual offset arithmetic with Intl.DateTimeFormat Asia/Bangkok
 - [ ] Save checkpoint
