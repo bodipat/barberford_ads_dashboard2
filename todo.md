@@ -126,3 +126,9 @@
 - [x] Remove Manus OAuth dependency from frontend
 - [x] Write vitest tests for login/logout/auth check
 - [x] Test full login flow end-to-end and save checkpoint
+
+## Bug Fix: Dashboard Shows Demo Data Instead of Real Data
+- [ ] Diagnose why dashboard shows "Demo Data" badge and fallback data
+- [ ] Fix root cause (API error, auth issue, or fallback logic)
+- [ ] Verify real data loads correctly
+- [ ] Save checkpoint
