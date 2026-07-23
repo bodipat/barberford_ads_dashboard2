@@ -766,3 +766,112 @@ export async function fetchImpressionShare(startDate: string, endDate: string): 
   return Object.values(map).map(c => ({ ...c, spend: parseFloat(c.spend.toFixed(2)) }))
     .sort((a, b) => b.impressionShare - a.impressionShare);
 }
+
+// ─── 14-Day Report: Per-Campaign Daily Breakdown ─────────────────────────────
+export interface CampaignDailyRow {
+  date: string;
+  campaignName: string;
+  branch: string;
+  impressions: number;
+  clicks: number;
+  spend: number;
+  conversions: number;
+  cpa: number;
+}
+
+export interface CampaignDailyConvAction {
+  date: string;
+  campaignName: string;
+  branch: string;
+  actionName: string;
+  conversions: number;
+}
+
+function getBranchFromCampaign(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("noir") || n.includes("siam")) return "Noir Siam";
+  if (n.includes("thonglor")) return "Thonglor";
+  if (n.includes("erawan")) return "Erawan";
+  if (n.includes("bbs") || n.includes("barbersmith")) return "Barbersmith";
+  return "Other";
+}
+
+export async function fetchCampaignDailyReport(
+  startDate: string,
+  endDate: string
+): Promise<{ daily: CampaignDailyRow[]; convActions: CampaignDailyConvAction[] }> {
+  const customer = getCustomer();
+
+  const [dailyRows, convRows] = await Promise.all([
+    customer.query(`
+      SELECT
+        campaign.name,
+        segments.date,
+        metrics.impressions,
+        metrics.clicks,
+        metrics.cost_micros,
+        metrics.conversions
+      FROM campaign
+      WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+        AND campaign.status != 'REMOVED'
+        AND metrics.impressions > 0
+      ORDER BY segments.date ASC, campaign.name ASC
+    `),
+    customer.query(`
+      SELECT
+        campaign.name,
+        segments.date,
+        segments.conversion_action_name,
+        metrics.conversions
+      FROM campaign
+      WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+        AND campaign.status != 'REMOVED'
+        AND metrics.conversions > 0
+      ORDER BY segments.date ASC, campaign.name ASC
+    `),
+  ]);
+
+  // Aggregate daily rows by campaign + date
+  const dailyMap = new Map<string, CampaignDailyRow>();
+  for (const row of dailyRows as any[]) {
+    const key = `${row.segments?.date}||${row.campaign?.name}`;
+    if (!dailyMap.has(key)) {
+      const spend = (row.metrics?.cost_micros || 0) / 1e6;
+      const conv = row.metrics?.conversions || 0;
+      dailyMap.set(key, {
+        date: row.segments?.date || "",
+        campaignName: row.campaign?.name || "",
+        branch: getBranchFromCampaign(row.campaign?.name || ""),
+        impressions: row.metrics?.impressions || 0,
+        clicks: row.metrics?.clicks || 0,
+        spend: parseFloat(spend.toFixed(2)),
+        conversions: parseFloat(conv.toFixed(2)),
+        cpa: conv > 0 ? parseFloat((spend / conv).toFixed(2)) : 0,
+      });
+    } else {
+      const existing = dailyMap.get(key)!;
+      const addSpend = (row.metrics?.cost_micros || 0) / 1e6;
+      const addConv = row.metrics?.conversions || 0;
+      existing.impressions += row.metrics?.impressions || 0;
+      existing.clicks += row.metrics?.clicks || 0;
+      existing.spend = parseFloat((existing.spend + addSpend).toFixed(2));
+      existing.conversions = parseFloat((existing.conversions + addConv).toFixed(2));
+      existing.cpa = existing.conversions > 0 ? parseFloat((existing.spend / existing.conversions).toFixed(2)) : 0;
+    }
+  }
+
+  const convActions: CampaignDailyConvAction[] = (convRows as any[])
+    .filter(r => r.segments?.conversion_action_name && r.metrics?.conversions > 0)
+    .map(r => ({
+      date: r.segments?.date || "",
+      campaignName: r.campaign?.name || "",
+      branch: getBranchFromCampaign(r.campaign?.name || ""),
+      actionName: r.segments?.conversion_action_name || "",
+      conversions: parseFloat((r.metrics?.conversions || 0).toFixed(2)),
+    }));
+
+  return {
+    daily: Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date) || a.campaignName.localeCompare(b.campaignName)),
+    convActions,
+  };
+}

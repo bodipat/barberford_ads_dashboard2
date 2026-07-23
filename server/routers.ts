@@ -17,6 +17,7 @@ import {
   fetchSearchTerms,
   fetchAdCopyPerformance,
   fetchImpressionShare,
+  fetchCampaignDailyReport,
   isConfigured,
   testConnection,
 } from "./googleAds";
@@ -660,6 +661,23 @@ export const appRouter = router({
         } catch (error) {
           console.error("[Dashboard] Error fetching impression share:", error);
           return { success: false, data: [], dataSource: "error" as const };
+        }
+      }),
+
+    // 14-day daily report per campaign with conversion action breakdown
+    getCampaignDailyReport: dashboardProcedure
+      .input(z.object({ days: z.number().min(1).max(90).default(14) }))
+      .query(async ({ input }) => {
+        if (!isConfigured()) return { success: false, daily: [], convActions: [], startDate: "", endDate: "", dataSource: "mock" as const };
+        try {
+          const now = new Date();
+          const endDate = getBangkokDateString(now);
+          const startDate = getBangkokDateOffset(now, -(input.days - 1));
+          const result = await fetchCampaignDailyReport(startDate, endDate);
+          return { success: true, ...result, startDate, endDate, dataSource: "live" as const };
+        } catch (error) {
+          console.error("[Dashboard] Error fetching campaign daily report:", error);
+          return { success: false, daily: [], convActions: [], dataSource: "error" as const };
         }
       }),
 

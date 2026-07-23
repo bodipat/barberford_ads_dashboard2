@@ -5,8 +5,9 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
-import Dashboard from "./pages/Dashboard";
-import Analytics from "./pages/Analytics";
+import Dashboard from "@/pages/Dashboard";
+import Analytics from "@/pages/Analytics";
+import CampaignReport from "@/pages/CampaignReport";
 
 function Router() {
   return (
@@ -14,6 +15,7 @@ function Router() {
       <Switch>
         <Route path={"/"} component={Dashboard} />
         <Route path={"/analytics"} component={Analytics} />
+        <Route path={"/report"} component={CampaignReport} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

@@ -20,7 +20,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, TrendingUp } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, TrendingUp, BarChart2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -29,6 +29,7 @@ import Login from "@/pages/Login";
 const menuItems = [
   { icon: LayoutDashboard, label: "Google Ads", path: "/" },
   { icon: TrendingUp, label: "Google Analytics", path: "/analytics" },
+  { icon: BarChart2, label: "Campaign Report", path: "/report" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
